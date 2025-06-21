@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>2D Person Walking Game</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: #2c3e50;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            font-family: 'Arial', sans-serif;
+        }
+        
+        .game-container {
+            text-align: center;
+            background: #34495e;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+        }
+        
+        canvas {
+            border: 3px solid #ecf0f1;
+            border-radius: 5px;
+            background: #27ae60;
+            display: block;
+            margin: 0 auto;
+        }
+        
+        .controls {
+            color: #ecf0f1;
+            margin-top: 15px;
+            font-size: 14px;
+        }
+        
+        .title {
+            color: #e74c3c;
+            font-size: 24px;
+            font-weight: bold;
+            margin-bottom: 15px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+        }
+        
+        .score {
+            color: #f39c12;
+            font-size: 18px;
+            font-weight: bold;
+            margin-bottom: 10px;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <div class="title">🚶 2D Person Walking Game</div>
+        <div class="score">🍄 Mushrooms Collected: <span id="mushroomCounter">0</span></div>
+        <div class="score">📏 Size: <span id="sizeIndicator">Small</span> (<span id="sizeProgress">20/60</span>)</div>
+        <canvas id="gameCanvas" width="800" height="600"></canvas>
+        <div class="controls">
+            <p><strong>Controls:</strong></p>
+            <p>↑↓←→ - Walk in direction | Or use left stick on gamepad</p>
+        </div>
+    </div>
+
+    <script>
+        // Game variables
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // Person object
+        const person = {
+            x: canvas.width / 2,
+            y: canvas.height / 2,
+            width: 20,
+            height: 20,
+            initialSize: 20,
+            maxSize: 60,
+            direction: 0, // For visual orientation
+            speed: 4
+        };
+
+        // Mushroom object
+        const mushroom = {
+            x: 0,
+            y: 0,
+            width: 16,
+            height: 16,
+            collected: false
+        };
+
+        // Game state
+        let mushroomCount = 0;
+        let collectionEffect = {
+            active: false,
+            x: 0,
+            y: 0,
+            timer: 0,
+            particles: []
+        };
+
+        // Input handling
+        const keys = {};
+        let gamepad = null;
+        let gamepadConnected = false;
+        
+        document.addEventListener('keydown', (e) => {
+            keys[e.key] = true;
+        });
+        
+        document.addEventListener('keyup', (e) => {
+            keys[e.key] = false;
+        });
+
+        // Gamepad connection handling
+        window.addEventListener('gamepadconnected', (e) => {
+            gamepad = e.gamepad;
+            gamepadConnected = true;
+            console.log('Gamepad connected:', e.gamepad.id);
+            updateControlsDisplay();
+        });
+
+        window.addEventListener('gamepaddisconnected', (e) => {
+            gamepad = null;
+            gamepadConnected = false;
+            console.log('Gamepad disconnected');
+            updateControlsDisplay();
+        });
+
+        function updateControlsDisplay() {
+            const controlsElement = document.querySelector('.controls');
+            if (gamepadConnected) {
+                controlsElement.innerHTML = `
+                    <p><strong>🎮 PS4 Controller Connected!</strong></p>
+                    <p>Left Stick: Walk in any direction (360°)</p>
+                    <p><em>Keyboard controls still work as backup</em></p>
+                `;
+            } else {
+                controlsElement.innerHTML = `
+                    <p><strong>Controls:</strong></p>
+                    <p>↑↓←→ - Walk in direction | Or use left stick on gamepad</p>
+                    <p><em>Connect a PS4 controller for smooth 360° movement!</em></p>
+                `;
+            }
+        }
+
+        function getGamepadInput() {
+            if (!gamepadConnected) return { moveX: 0, moveY: 0 };
+            
+            // Get fresh gamepad state
+            const gamepads = navigator.getGamepads();
+            gamepad = gamepads[0] || gamepads[1] || gamepads[2] || gamepads[3];
+            
+            if (!gamepad) return { moveX: 0, moveY: 0 };
+
+            // PS4 controller mapping:
+            // Axis 0: Left stick horizontal (-1 left, +1 right)
+            // Axis 1: Left stick vertical (-1 up, +1 down)
+            
+            const leftStickX = gamepad.axes[0] || 0;
+            const leftStickY = gamepad.axes[1] || 0;
+
+            // Apply deadzone
+            const deadzone = 0.1;
+            const moveX = Math.abs(leftStickX) > deadzone ? leftStickX : 0;
+            const moveY = Math.abs(leftStickY) > deadzone ? leftStickY : 0;
+
+            return { moveX, moveY };
+        }
+
+        // Game functions
+        function updatePerson() {
+            // Get gamepad input
+            const gamepadInput = getGamepadInput();
+            
+            // Calculate movement direction
+            let moveX = 0;
+            let moveY = 0;
+            
+            // Keyboard input (digital)
+            if (keys['ArrowLeft']) moveX -= 1;
+            if (keys['ArrowRight']) moveX += 1;
+            if (keys['ArrowUp']) moveY -= 1;
+            if (keys['ArrowDown']) moveY += 1;
+            
+            // Gamepad input (analog) - takes priority if connected
+            if (gamepadConnected && (Math.abs(gamepadInput.moveX) > 0 || Math.abs(gamepadInput.moveY) > 0)) {
+                moveX = gamepadInput.moveX;
+                moveY = gamepadInput.moveY;
+            }
+            
+            // Move person directly based on input
+            person.x += moveX * person.speed;
+            person.y += moveY * person.speed;
+            
+            // Update direction for visual orientation (only if moving)
+            if (moveX !== 0 || moveY !== 0) {
+                person.direction = Math.atan2(moveY, moveX);
+            }
+
+            // Keep person within screen bounds
+            person.x = Math.max(person.width/2, Math.min(canvas.width - person.width/2, person.x));
+            person.y = Math.max(person.height/2, Math.min(canvas.height - person.height/2, person.y));
+        }
+
+        function drawGround() {
+            // Draw grass background
+            ctx.fillStyle = '#27ae60';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Draw some decorative elements
+            ctx.strokeStyle = '#2ecc71';
+            ctx.lineWidth = 2;
+            ctx.setLineDash([5, 10]);
+            
+            // Draw some paths
+            for (let i = 0; i < 3; i++) {
+                ctx.beginPath();
+                ctx.moveTo(0, 150 + i * 150);
+                ctx.lineTo(canvas.width, 150 + i * 150);
+                ctx.stroke();
+            }
+            
+            for (let i = 0; i < 4; i++) {
+                ctx.beginPath();
+                ctx.moveTo(150 + i * 150, 0);
+                ctx.lineTo(150 + i * 150, canvas.height);
+                ctx.stroke();
+            }
+            
+            ctx.setLineDash([]);
+        }
+
+        function drawPerson() {
+            ctx.save();
+            ctx.translate(person.x, person.y);
+            ctx.rotate(person.direction);
+
+            // Person body (main circle)
+            ctx.fillStyle = '#3498db';
+            ctx.beginPath();
+            ctx.arc(0, 0, person.width/2, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Person outline
+            ctx.strokeStyle = '#2980b9';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            // Face direction indicator (small triangle)
+            ctx.fillStyle = '#ecf0f1';
+            ctx.beginPath();
+            ctx.moveTo(person.width/2 - 5, 0);
+            ctx.lineTo(person.width/2 + 3, -4);
+            ctx.lineTo(person.width/2 + 3, 4);
+            ctx.closePath();
+            ctx.fill();
+
+            // Simple eyes
+            ctx.fillStyle = '#2c3e50';
+            ctx.beginPath();
+            ctx.arc(-2, -3, 1.5, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(-2, 3, 1.5, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.restore();
+        }
+
+        function drawMushroom() {
+            if (mushroom.collected) return;
+            
+            ctx.save();
+            ctx.translate(mushroom.x, mushroom.y);
+            
+            // Mushroom stem
+            ctx.fillStyle = '#f4f4f4';
+            ctx.fillRect(-2, -2, 4, 8);
+            
+            // Mushroom cap
+            ctx.fillStyle = '#e74c3c';
+            ctx.beginPath();
+            ctx.arc(0, -4, 8, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Mushroom cap outline
+            ctx.strokeStyle = '#c0392b';
+            ctx.lineWidth = 1;
+            ctx.stroke();
+            
+            // White spots on mushroom
+            ctx.fillStyle = '#ffffff';
+            ctx.beginPath();
+            ctx.arc(-3, -6, 1.5, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(2, -4, 1, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(0, -2, 1, 0, Math.PI * 2);
+            ctx.fill();
+            
+            ctx.restore();
+        }
+
+        function drawCollectionEffect() {
+            if (!collectionEffect.active) return;
+            
+            // Draw particles
+            ctx.save();
+            for (const particle of collectionEffect.particles) {
+                const alpha = particle.life / 30;
+                ctx.fillStyle = `rgba(255, 215, 0, ${alpha})`;
+                ctx.beginPath();
+                ctx.arc(particle.x, particle.y, 3, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            
+            // Draw collection text
+            if (collectionEffect.timer > 15) {
+                ctx.fillStyle = '#f39c12';
+                ctx.font = 'bold 16px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText('+1', collectionEffect.x, collectionEffect.y - 20);
+            }
+            
+            ctx.restore();
+        }
+
+        function gameLoop() {
+            // Clear canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Update and draw everything
+            updatePerson();
+            
+            // Check mushroom collision
+            if (checkMushroomCollision()) {
+                collectMushroom();
+            }
+            
+            // Update effects
+            updateCollectionEffect();
+            
+            drawGround();
+            drawPerson();
+            drawMushroom();
+            drawCollectionEffect();
+            
+            // Continue the loop
+            requestAnimationFrame(gameLoop);
+        }
+
+        // Mushroom functions
+        function spawnMushroom() {
+            // Generate random position with some margin from edges
+            const margin = 30;
+            mushroom.x = margin + Math.random() * (canvas.width - 2 * margin);
+            mushroom.y = margin + Math.random() * (canvas.height - 2 * margin);
+            mushroom.collected = false;
+        }
+
+        function checkMushroomCollision() {
+            if (mushroom.collected) return false;
+            
+            const dx = person.x - mushroom.x;
+            const dy = person.y - mushroom.y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            
+            // Check if person is close enough to collect mushroom
+            return distance < (person.width/2 + mushroom.width/2 + 5);
+        }
+
+        function collectMushroom() {
+            mushroom.collected = true;
+            mushroomCount++;
+            
+            // Grow the player (but not beyond max size)
+            if (person.width < person.maxSize) {
+                const growthAmount = 2;
+                person.width = Math.min(person.width + growthAmount, person.maxSize);
+                person.height = Math.min(person.height + growthAmount, person.maxSize);
+            }
+            
+            // Update counter display
+            document.getElementById('mushroomCounter').textContent = mushroomCount;
+            
+            // Update size display
+            updateSizeDisplay();
+            
+            // Start collection effect
+            collectionEffect.active = true;
+            collectionEffect.x = mushroom.x;
+            collectionEffect.y = mushroom.y;
+            collectionEffect.timer = 30; // 30 frames
+            collectionEffect.particles = [];
+            
+            // Create particles for effect
+            for (let i = 0; i < 8; i++) {
+                collectionEffect.particles.push({
+                    x: mushroom.x,
+                    y: mushroom.y,
+                    vx: (Math.random() - 0.5) * 6,
+                    vy: (Math.random() - 0.5) * 6,
+                    life: 30
+                });
+            }
+            
+            // Spawn new mushroom after a short delay
+            setTimeout(() => {
+                spawnMushroom();
+            }, 500);
+        }
+
+        function updateCollectionEffect() {
+            if (!collectionEffect.active) return;
+            
+            collectionEffect.timer--;
+            
+            // Update particles
+            for (let i = collectionEffect.particles.length - 1; i >= 0; i--) {
+                const particle = collectionEffect.particles[i];
+                particle.x += particle.vx;
+                particle.y += particle.vy;
+                particle.vy += 0.1; // gravity
+                particle.life--;
+                
+                if (particle.life <= 0) {
+                    collectionEffect.particles.splice(i, 1);
+                }
+            }
+            
+            if (collectionEffect.timer <= 0 && collectionEffect.particles.length === 0) {
+                collectionEffect.active = false;
+            }
+        }
+
+        function updateSizeDisplay() {
+            const sizeProgress = document.getElementById('sizeProgress');
+            const sizeIndicator = document.getElementById('sizeIndicator');
+            
+            sizeProgress.textContent = `${person.width}/${person.maxSize}`;
+            
+            // Update size indicator text
+            if (person.width <= 25) {
+                sizeIndicator.textContent = 'Small';
+            } else if (person.width <= 35) {
+                sizeIndicator.textContent = 'Medium';
+            } else if (person.width <= 45) {
+                sizeIndicator.textContent = 'Large';
+            } else if (person.width < person.maxSize) {
+                sizeIndicator.textContent = 'Huge';
+            } else {
+                sizeIndicator.textContent = 'Maximum!';
+            }
+        }
+
+        // Start the game
+        spawnMushroom(); // Spawn first mushroom
+        updateSizeDisplay(); // Initialize size display
+        gameLoop();
+    </script>
+</body>
+</html> 
