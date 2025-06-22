@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jumper - Gierka</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: linear-gradient(to bottom, #87CEEB, #98FB98);
+            font-family: Arial, sans-serif;
+            overflow: hidden;
+            touch-action: manipulation;
+        }
+
+        #gameContainer {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #gameCanvas {
+            border: 3px solid #333;
+            background: linear-gradient(to bottom, #87CEEB 0%, #87CEEB 70%, #90EE90 70%, #228B22 100%);
+            display: block;
+        }
+
+        #ui {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: #333;
+            font-size: 28px;
+            font-weight: bold;
+            z-index: 10;
+            background: rgba(255, 255, 255, 0.8);
+            padding: 15px;
+            border-radius: 10px;
+            border: 2px solid #333;
+        }
+
+        #instructions {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            color: #333;
+            font-size: 24px;
+            background: rgba(255, 255, 255, 0.9);
+            padding: 30px;
+            border-radius: 15px;
+            border: 3px solid #333;
+        }
+
+        #gameOver {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            color: #333;
+            font-size: 24px;
+            background: rgba(255, 255, 255, 0.95);
+            padding: 30px;
+            border-radius: 15px;
+            border: 3px solid #333;
+            display: none;
+        }
+
+        .button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            font-size: 18px;
+            border-radius: 8px;
+            cursor: pointer;
+            margin: 10px;
+            font-weight: bold;
+        }
+
+        .button:hover {
+            background: #0056b3;
+        }
+
+        .hearts {
+            display: flex;
+            gap: 5px;
+            margin-top: 5px;
+        }
+
+        .heart {
+            font-size: 24px;
+        }
+
+        .lives-label {
+            font-size: 20px;
+            margin-bottom: 5px;
+        }
+
+        @media (max-width: 768px) {
+            #ui {
+                font-size: 20px;
+            }
+            #instructions, #gameOver {
+                font-size: 20px;
+                padding: 20px;
+                margin: 10px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="gameContainer">
+        <canvas id="gameCanvas" width="800" height="400"></canvas>
+        
+        <div id="ui">
+            <div>Score: <span id="score">0</span></div>
+            <div class="lives-label">Lives:</div>
+            <div class="hearts" id="lives">
+                <span class="heart">❤️</span>
+                <span class="heart">❤️</span>
+                <span class="heart">❤️</span>
+            </div>
+        </div>
+
+        <div id="instructions">
+            <h2>🏃‍♂️ Jumper</h2>
+            <p>Jump over obstacles coming your way!</p>
+            <p><strong>Controls:</strong></p>
+            <p>🎮 Gamepad: X button</p>
+            <p>⌨️ Keyboard: SPACE</p>
+            <p>📱 Mobile: Tap screen</p>
+            <p><strong>Press any control to start!</strong></p>
+        </div>
+
+        <div id="gameOver">
+            <h2>Game Over!</h2>
+            <p>Final Score: <span id="finalScore">0</span></p>
+            <p>Obstacles Jumped: <span id="obstaclesJumped">0</span></p>
+            <button class="button" onclick="restartGame()">Play Again</button>
+            <button class="button" onclick="window.location.href='index.html'">Back to Menu</button>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        // Responsive canvas
+        function resizeCanvas() {
+            const container = document.getElementById('gameContainer');
+            const maxWidth = Math.min(800, window.innerWidth - 40);
+            const maxHeight = Math.min(400, window.innerHeight - 100);
+            const aspectRatio = 800 / 400;
+            
+            let width = maxWidth;
+            let height = width / aspectRatio;
+            
+            if (height > maxHeight) {
+                height = maxHeight;
+                width = height * aspectRatio;
+            }
+            
+            canvas.width = 800;
+            canvas.height = 400;
+            canvas.style.width = width + 'px';
+            canvas.style.height = height + 'px';
+        }
+        
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        // Game state
+        let gameState = 'waiting'; // 'waiting', 'playing', 'gameOver'
+        let gameSpeed = 2;
+        let baseGameSpeed = 2;
+        let speedIncrementRate = 0.001; // Speed increase per frame
+        let score = 0;
+        let lives = 3;
+        let obstaclesJumped = 0;
+
+        // Player object
+        const player = {
+            x: 100,
+            y: 300,
+            width: 40,
+            height: 60,
+            velocityY: 0,
+            isJumping: false,
+            jumpPower: -18,
+            gravity: 0.45,
+            groundY: 300,
+            color: '#FF6B6B'
+        };
+
+        // Obstacles array
+        let obstacles = [];
+        let obstacleSpawnTimer = 0;
+        let obstacleSpawnRate = 120; // frames between obstacles
+        let nextObstacleSpawn = 0;
+
+        // Background elements
+        let clouds = [];
+        for (let i = 0; i < 5; i++) {
+            clouds.push({
+                x: Math.random() * 1000,
+                y: Math.random() * 100 + 50,
+                size: Math.random() * 30 + 20,
+                speed: Math.random() * 0.5 + 0.2
+            });
+        }
+
+        // Input handling
+        let inputPressed = false;
+
+        // Keyboard input
+        document.addEventListener('keydown', (e) => {
+            if (e.code === 'Space') {
+                e.preventDefault();
+                handleInput();
+            }
+        });
+
+        // Gamepad input
+        function checkGamepad() {
+            const gamepads = navigator.getGamepads();
+            for (let i = 0; i < gamepads.length; i++) {
+                const gamepad = gamepads[i];
+                if (gamepad) {
+                    // X button is typically button 0 on most gamepads
+                    if (gamepad.buttons[0] && gamepad.buttons[0].pressed && !inputPressed) {
+                        handleInput();
+                        inputPressed = true;
+                    } else if (!gamepad.buttons[0].pressed) {
+                        inputPressed = false;
+                    }
+                }
+            }
+        }
+
+        // Touch input
+        canvas.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            handleInput();
+        });
+
+        canvas.addEventListener('click', (e) => {
+            handleInput();
+        });
+
+        function handleInput() {
+            if (gameState === 'waiting') {
+                startGame();
+            } else if (gameState === 'playing' && !player.isJumping) {
+                jump();
+            }
+        }
+
+        function startGame() {
+            gameState = 'playing';
+            document.getElementById('instructions').style.display = 'none';
+            resetGame();
+        }
+
+        function resetGame() {
+            player.y = player.groundY;
+            player.velocityY = 0;
+            player.isJumping = false;
+            obstacles = [];
+            score = 0;
+            lives = 3;
+            obstaclesJumped = 0;
+            gameSpeed = baseGameSpeed;
+            obstacleSpawnTimer = 0;
+            obstacleSpawnRate = 120;
+            nextObstacleSpawn = obstacleSpawnRate;
+            updateUI();
+        }
+
+        function jump() {
+            if (!player.isJumping) {
+                player.velocityY = player.jumpPower;
+                player.isJumping = true;
+            }
+        }
+
+        function updatePlayer() {
+            // Apply gravity
+            player.velocityY += player.gravity;
+            player.y += player.velocityY;
+
+            // Ground collision
+            if (player.y >= player.groundY) {
+                player.y = player.groundY;
+                player.velocityY = 0;
+                player.isJumping = false;
+            }
+        }
+
+        function spawnObstacle() {
+            obstacles.push({
+                x: canvas.width,
+                y: player.groundY + 20,
+                width: 30,
+                height: 40,
+                color: '#8B4513',
+                passed: false
+            });
+        }
+
+        function updateGameSpeed() {
+            // Continuously increase game speed over time
+            if (gameSpeed < 6) {
+                gameSpeed += speedIncrementRate;
+            }
+        }
+
+        function updateObstacles() {
+            // Spawn new obstacles with random timing
+            obstacleSpawnTimer++;
+            if (obstacleSpawnTimer >= nextObstacleSpawn) {
+                spawnObstacle();
+                obstacleSpawnTimer = 0;
+                // Set next spawn time with randomness (current rate + 0 to 50% extra)
+                const randomExtra = Math.random() * (obstacleSpawnRate * 0.5);
+                nextObstacleSpawn = obstacleSpawnRate + randomExtra;
+                
+                // Gradually increase difficulty by reducing spawn rate
+                if (obstacleSpawnRate > 60) {
+                    obstacleSpawnRate -= 0.3;
+                }
+            }
+
+            // Update obstacle positions
+            for (let i = obstacles.length - 1; i >= 0; i--) {
+                const obstacle = obstacles[i];
+                obstacle.x -= gameSpeed;
+
+                // Check if obstacle was passed
+                if (!obstacle.passed && obstacle.x + obstacle.width < player.x) {
+                    obstacle.passed = true;
+                    obstaclesJumped++;
+                    score += 10;
+                }
+
+                // Remove obstacles that are off screen
+                if (obstacle.x + obstacle.width < 0) {
+                    obstacles.splice(i, 1);
+                }
+            }
+        }
+
+        function checkCollisions() {
+            for (let obstacle of obstacles) {
+                if (player.x < obstacle.x + obstacle.width &&
+                    player.x + player.width > obstacle.x &&
+                    player.y < obstacle.y + obstacle.height &&
+                    player.y + player.height > obstacle.y) {
+                    
+                    // Collision detected
+                    lives--;
+                    updateUI();
+                    
+                    // Remove the obstacle that was hit
+                    obstacles = obstacles.filter(obs => obs !== obstacle);
+                    
+                    if (lives <= 0) {
+                        gameOver();
+                    }
+                    break;
+                }
+            }
+        }
+
+        function updateClouds() {
+            for (let cloud of clouds) {
+                cloud.x -= cloud.speed;
+                if (cloud.x + cloud.size < 0) {
+                    cloud.x = canvas.width + cloud.size;
+                }
+            }
+        }
+
+        function drawCloud(cloud) {
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+            ctx.beginPath();
+            ctx.arc(cloud.x, cloud.y, cloud.size * 0.5, 0, Math.PI * 2);
+            ctx.arc(cloud.x + cloud.size * 0.3, cloud.y, cloud.size * 0.4, 0, Math.PI * 2);
+            ctx.arc(cloud.x - cloud.size * 0.3, cloud.y, cloud.size * 0.4, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        function drawPlayer() {
+            ctx.fillStyle = player.color;
+            ctx.fillRect(player.x, player.y, player.width, player.height);
+            
+            // Add simple features
+            ctx.fillStyle = '#FFF';
+            ctx.fillRect(player.x + 5, player.y + 10, 8, 8); // eye
+            ctx.fillRect(player.x + 25, player.y + 10, 8, 8); // eye
+            
+            ctx.fillStyle = '#000';
+            ctx.fillRect(player.x + 7, player.y + 12, 4, 4); // pupil
+            ctx.fillRect(player.x + 27, player.y + 12, 4, 4); // pupil
+        }
+
+        function drawObstacles() {
+            for (let obstacle of obstacles) {
+                ctx.fillStyle = obstacle.color;
+                ctx.fillRect(obstacle.x, obstacle.y, obstacle.width, obstacle.height);
+                
+                // Add some texture
+                ctx.fillStyle = '#654321';
+                ctx.fillRect(obstacle.x + 5, obstacle.y + 5, obstacle.width - 10, obstacle.height - 10);
+            }
+        }
+
+        function drawGround() {
+            const groundY = player.groundY + player.height;
+            ctx.fillStyle = '#228B22';
+            ctx.fillRect(0, groundY, canvas.width, canvas.height - groundY);
+            
+            // Grass texture
+            ctx.fillStyle = '#32CD32';
+            for (let x = 0; x < canvas.width; x += 10) {
+                ctx.fillRect(x, groundY, 2, 8);
+            }
+        }
+
+        function draw() {
+            // Clear canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Draw background
+            const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+            gradient.addColorStop(0, '#87CEEB');
+            gradient.addColorStop(0.7, '#87CEEB');
+            gradient.addColorStop(0.7, '#90EE90');
+            gradient.addColorStop(1, '#228B22');
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Draw clouds
+            for (let cloud of clouds) {
+                drawCloud(cloud);
+            }
+            
+            drawGround();
+            drawPlayer();
+            drawObstacles();
+        }
+
+        function updateUI() {
+            document.getElementById('score').textContent = score;
+            
+            const livesContainer = document.getElementById('lives');
+            livesContainer.innerHTML = '';
+            for (let i = 0; i < lives; i++) {
+                livesContainer.innerHTML += '<span class="heart">❤️</span>';
+            }
+            for (let i = lives; i < 3; i++) {
+                livesContainer.innerHTML += '<span class="heart">🖤</span>';
+            }
+        }
+
+        function gameOver() {
+            gameState = 'gameOver';
+            document.getElementById('finalScore').textContent = score;
+            document.getElementById('obstaclesJumped').textContent = obstaclesJumped;
+            document.getElementById('gameOver').style.display = 'block';
+        }
+
+        function restartGame() {
+            gameState = 'waiting';
+            document.getElementById('gameOver').style.display = 'none';
+            document.getElementById('instructions').style.display = 'block';
+            resetGame();
+        }
+
+        // Game loop
+        function gameLoop() {
+            checkGamepad();
+            
+            if (gameState === 'playing') {
+                updateGameSpeed();
+                updatePlayer();
+                updateObstacles();
+                updateClouds();
+                checkCollisions();
+            } else if (gameState === 'waiting') {
+                updateClouds();
+            }
+            
+            draw();
+            requestAnimationFrame(gameLoop);
+        }
+
+        // Initialize game
+        updateUI();
+        gameLoop();
+    </script>
+</body>
+</html> 
