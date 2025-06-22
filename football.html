@@ -1,0 +1,608 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Football Game</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            background: #1a1a1a;
+            color: white;
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        canvas {
+            border: 2px solid #fff;
+            background: #2a5c2a;
+            display: block;
+        }
+        .controls {
+            margin-top: 20px;
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 20px;
+            max-width: 800px;
+        }
+        .control-group {
+            background: #333;
+            padding: 15px;
+            border-radius: 8px;
+        }
+        .control-group h3 {
+            margin: 0 0 10px 0;
+            color: #4CAF50;
+        }
+        .control {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin: 8px 0;
+        }
+        input[type="range"] {
+            width: 120px;
+        }
+        .instructions {
+            margin-bottom: 20px;
+            text-align: center;
+            background: #333;
+            padding: 15px;
+            border-radius: 8px;
+            max-width: 600px;
+        }
+    </style>
+</head>
+<body>
+    <div class="instructions">
+        <h2>Football Game</h2>
+        <p><strong>Controls:</strong> WASD or Arrow Keys to move | Gamepad supported</p>
+        <p><strong>Goal:</strong> Hit the ball and score goals!</p>
+    </div>
+
+    <canvas id="gameCanvas" width="800" height="600"></canvas>
+
+    <div class="controls">
+        <div class="control-group">
+            <h3>Player Physics</h3>
+            <div class="control">
+                <label>Size:</label>
+                <input type="range" id="playerSize" min="15" max="40" value="25">
+                <span id="playerSizeValue">25</span>
+            </div>
+            <div class="control">
+                <label>Mass:</label>
+                <input type="range" id="playerMass" min="50" max="200" value="100">
+                <span id="playerMassValue">100</span>
+            </div>
+            <div class="control">
+                <label>Speed:</label>
+                <input type="range" id="playerSpeed" min="100" max="800" value="700">
+                <span id="playerSpeedValue">700</span>
+            </div>
+            <div class="control">
+                <label>Friction:</label>
+                <input type="range" id="playerFriction" min="0.01" max="0.2" step="0.01" value="0.08">
+                <span id="playerFrictionValue">0.08</span>
+            </div>
+        </div>
+
+        <div class="control-group">
+            <h3>Ball Physics</h3>
+            <div class="control">
+                <label>Size:</label>
+                <input type="range" id="ballSize" min="8" max="25" value="15">
+                <span id="ballSizeValue">15</span>
+            </div>
+            <div class="control">
+                <label>Mass:</label>
+                <input type="range" id="ballMass" min="10" max="100" value="30">
+                <span id="ballMassValue">30</span>
+            </div>
+            <div class="control">
+                <label>Bounce:</label>
+                <input type="range" id="ballBounce" min="0.3" max="1.0" step="0.1" value="0.8">
+                <span id="ballBounceValue">0.8</span>
+            </div>
+            <div class="control">
+                <label>Friction:</label>
+                <input type="range" id="ballFriction" min="0.005" max="0.05" step="0.005" value="0.02">
+                <span id="ballFrictionValue">0.02</span>
+            </div>
+        </div>
+
+        <div class="control-group">
+            <h3>Game Settings</h3>
+            <div class="control">
+                <label>Collision Force:</label>
+                <input type="range" id="collisionForce" min="0.5" max="3.0" step="0.1" value="1.5">
+                <span id="collisionForceValue">1.5</span>
+            </div>
+            <div class="control">
+                <label>Goals to Win:</label>
+                <input type="range" id="goalsToWin" min="1" max="10" value="3">
+                <span id="goalsToWinValue">3</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        class Game {
+            constructor() {
+                this.canvas = document.getElementById('gameCanvas');
+                this.ctx = this.canvas.getContext('2d');
+                this.width = this.canvas.width;
+                this.height = this.canvas.height;
+                
+                this.gameState = 'playing';
+                this.playerScore = 0;
+                this.gamepadIndex = -1;
+                this.goalCelebrationTimer = 0;
+                this.goalCelebrationDuration = 3000; // 3 seconds
+                this.animationTime = 0;
+                
+                this.initializeParameters();
+                this.setupControls();
+                
+                this.player = {
+                    x: this.width / 4,
+                    y: this.height / 2,
+                    vx: 0,
+                    vy: 0
+                };
+                
+                this.ball = {
+                    x: this.width / 2,
+                    y: this.height / 2,
+                    vx: 0,
+                    vy: 0
+                };
+                
+                this.keys = {};
+                this.setupInput();
+                
+                this.leftGoal = { x: 0, y: (this.height - 120) / 2, width: 15, height: 120 };
+                this.rightGoal = { x: this.width - 15, y: (this.height - 120) / 2, width: 15, height: 120 };
+                
+                this.lastTime = 0;
+                this.gameLoop();
+            }
+            
+            initializeParameters() {
+                this.params = {
+                    playerSize: 25,
+                    playerMass: 100,
+                    playerSpeed: 700,
+                    playerFriction: 0.08,
+                    ballSize: 15,
+                    ballMass: 30,
+                    ballBounce: 0.8,
+                    ballFriction: 0.02,
+                    gravity: 0,
+                    collisionForce: 1.5,
+                    goalsToWin: 3
+                };
+            }
+            
+            setupControls() {
+                const controls = ['playerSize', 'playerMass', 'playerSpeed', 'playerFriction',
+                                'ballSize', 'ballMass', 'ballBounce', 'ballFriction',
+                                'collisionForce', 'goalsToWin'];
+                
+                controls.forEach(control => {
+                    const slider = document.getElementById(control);
+                    const valueSpan = document.getElementById(control + 'Value');
+                    
+                    slider.addEventListener('input', (e) => {
+                        this.params[control] = parseFloat(e.target.value);
+                        valueSpan.textContent = e.target.value;
+                    });
+                });
+            }
+            
+            setupInput() {
+                document.addEventListener('keydown', (e) => {
+                    this.keys[e.code] = true;
+                });
+                
+                document.addEventListener('keyup', (e) => {
+                    this.keys[e.code] = false;
+                });
+                
+                window.addEventListener("gamepadconnected", (e) => {
+                    console.log("Gamepad connected:", e.gamepad.id);
+                    this.gamepadIndex = e.gamepad.index;
+                });
+                
+                window.addEventListener("gamepaddisconnected", (e) => {
+                    console.log("Gamepad disconnected");
+                    this.gamepadIndex = -1;
+                });
+            }
+            
+            getInput() {
+                let input = { left: false, right: false, up: false, down: false };
+                
+                if (this.keys['KeyA'] || this.keys['ArrowLeft']) input.left = true;
+                if (this.keys['KeyD'] || this.keys['ArrowRight']) input.right = true;
+                if (this.keys['KeyW'] || this.keys['ArrowUp']) input.up = true;
+                if (this.keys['KeyS'] || this.keys['ArrowDown']) input.down = true;
+                
+                if (this.gamepadIndex >= 0) {
+                    const gamepad = navigator.getGamepads()[this.gamepadIndex];
+                    if (gamepad) {
+                        const deadzone = 0.2;
+                        if (gamepad.axes[0] < -deadzone) input.left = true;
+                        if (gamepad.axes[0] > deadzone) input.right = true;
+                        if (gamepad.axes[1] < -deadzone) input.up = true;
+                        if (gamepad.axes[1] > deadzone) input.down = true;
+                        
+                        if (gamepad.buttons[14] && gamepad.buttons[14].pressed) input.left = true;
+                        if (gamepad.buttons[15] && gamepad.buttons[15].pressed) input.right = true;
+                        if (gamepad.buttons[12] && gamepad.buttons[12].pressed) input.up = true;
+                        if (gamepad.buttons[13] && gamepad.buttons[13].pressed) input.down = true;
+                    }
+                }
+                
+                return input;
+            }
+            
+            update(deltaTime) {
+                this.animationTime += deltaTime;
+                
+                if (this.gameState === 'goalCelebration') {
+                    this.goalCelebrationTimer += deltaTime;
+                    if (this.goalCelebrationTimer >= this.goalCelebrationDuration) {
+                        this.gameState = 'playing';
+                        this.goalCelebrationTimer = 0;
+                    }
+                    return;
+                }
+                
+                if (this.gameState !== 'playing') return;
+                
+                const dt = deltaTime / 1000;
+                const input = this.getInput();
+                
+                this.updatePlayer(dt, input);
+                this.updateBall(dt);
+                this.checkCollisions();
+                this.checkGoals();
+            }
+            
+            updatePlayer(dt, input) {
+                const player = this.player;
+                const speed = this.params.playerSpeed;
+                
+                if (input.left) {
+                    player.vx -= speed * dt;
+                }
+                if (input.right) {
+                    player.vx += speed * dt;
+                }
+                if (input.up) {
+                    player.vy -= speed * dt;
+                }
+                if (input.down) {
+                    player.vy += speed * dt;
+                }
+                
+                player.vx *= (1 - this.params.playerFriction);
+                player.vy *= (1 - this.params.playerFriction);
+                
+                player.x += player.vx * dt;
+                player.y += player.vy * dt;
+                
+                // Keep player within field boundaries
+                if (player.x < this.params.playerSize) {
+                    player.x = this.params.playerSize;
+                    player.vx = 0;
+                }
+                if (player.x > this.width - this.params.playerSize) {
+                    player.x = this.width - this.params.playerSize;
+                    player.vx = 0;
+                }
+                if (player.y < this.params.playerSize) {
+                    player.y = this.params.playerSize;
+                    player.vy = 0;
+                }
+                if (player.y > this.height - this.params.playerSize) {
+                    player.y = this.height - this.params.playerSize;
+                    player.vy = 0;
+                }
+            }
+            
+            updateBall(dt) {
+                const ball = this.ball;
+                
+                ball.vx *= (1 - this.params.ballFriction);
+                ball.vy *= (1 - this.params.ballFriction);
+                
+                ball.x += ball.vx * dt;
+                ball.y += ball.vy * dt;
+                
+                // Keep ball within field boundaries, except for goal areas
+                if (ball.x < this.params.ballSize) {
+                    // Check if ball is in left goal area
+                    if (ball.y >= this.leftGoal.y && ball.y <= this.leftGoal.y + this.leftGoal.height) {
+                        // Ball is in goal area, don't bounce
+                    } else {
+                        ball.x = this.params.ballSize;
+                        ball.vx = -ball.vx * this.params.ballBounce;
+                    }
+                }
+                if (ball.x > this.width - this.params.ballSize) {
+                    // Check if ball is in right goal area
+                    if (ball.y >= this.rightGoal.y && ball.y <= this.rightGoal.y + this.rightGoal.height) {
+                        // Ball is in goal area, don't bounce
+                    } else {
+                        ball.x = this.width - this.params.ballSize;
+                        ball.vx = -ball.vx * this.params.ballBounce;
+                    }
+                }
+                if (ball.y < this.params.ballSize) {
+                    ball.y = this.params.ballSize;
+                    ball.vy = -ball.vy * this.params.ballBounce;
+                }
+                if (ball.y > this.height - this.params.ballSize) {
+                    ball.y = this.height - this.params.ballSize;
+                    ball.vy = -ball.vy * this.params.ballBounce;
+                }
+            }
+            
+            checkCollisions() {
+                const player = this.player;
+                const ball = this.ball;
+                
+                const dx = ball.x - player.x;
+                const dy = ball.y - player.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                const minDistance = this.params.playerSize + this.params.ballSize;
+                
+                if (distance < minDistance) {
+                    const overlap = minDistance - distance;
+                    const nx = dx / distance;
+                    const ny = dy / distance;
+                    
+                    const separation = overlap / 2;
+                    player.x -= nx * separation;
+                    player.y -= ny * separation;
+                    ball.x += nx * separation;
+                    ball.y += ny * separation;
+                    
+                    const relativeVx = ball.vx - player.vx;
+                    const relativeVy = ball.vy - player.vy;
+                    const relativeSpeed = relativeVx * nx + relativeVy * ny;
+                    
+                    if (relativeSpeed > 0) return;
+                    
+                    const restitution = this.params.ballBounce;
+                    const impulse = -(1 + restitution) * relativeSpeed;
+                    const totalMass = this.params.playerMass + this.params.ballMass;
+                    const impulseScalar = impulse / totalMass * this.params.collisionForce;
+                    
+                    const playerImpulse = impulseScalar * this.params.ballMass;
+                    const ballImpulse = impulseScalar * this.params.playerMass;
+                    
+                    player.vx -= playerImpulse * nx;
+                    player.vy -= playerImpulse * ny;
+                    ball.vx += ballImpulse * nx;
+                    ball.vy += ballImpulse * ny;
+                }
+            }
+            
+            checkGoals() {
+                const ball = this.ball;
+                
+                // Check left goal - ball center needs to cross the goal line
+                if (ball.x - this.params.ballSize <= this.leftGoal.x + this.leftGoal.width &&
+                    ball.x >= this.leftGoal.x &&
+                    ball.y + this.params.ballSize >= this.leftGoal.y &&
+                    ball.y - this.params.ballSize <= this.leftGoal.y + this.leftGoal.height) {
+                    this.playerScore++;
+                    this.startGoalCelebration();
+                    
+                    if (this.playerScore >= this.params.goalsToWin) {
+                        this.gameState = 'gameOver';
+                    }
+                }
+                
+                // Check right goal - ball center needs to cross the goal line
+                if (ball.x + this.params.ballSize >= this.rightGoal.x &&
+                    ball.x <= this.rightGoal.x + this.rightGoal.width &&
+                    ball.y + this.params.ballSize >= this.rightGoal.y &&
+                    ball.y - this.params.ballSize <= this.rightGoal.y + this.rightGoal.height) {
+                    this.playerScore++;
+                    this.startGoalCelebration();
+                    
+                    if (this.playerScore >= this.params.goalsToWin) {
+                        this.gameState = 'gameOver';
+                    }
+                }
+            }
+            
+            startGoalCelebration() {
+                this.gameState = 'goalCelebration';
+                this.goalCelebrationTimer = 0;
+                this.resetPositions();
+            }
+            
+            resetPositions() {
+                // Reset player to starting position
+                this.player.x = this.width / 4;
+                this.player.y = this.height / 2;
+                this.player.vx = 0;
+                this.player.vy = 0;
+                
+                // Reset ball to center
+                this.ball.x = this.width / 2;
+                this.ball.y = this.height / 2;
+                this.ball.vx = 0;
+                this.ball.vy = 0;
+            }
+            
+            render() {
+                const ctx = this.ctx;
+                
+                ctx.fillStyle = '#2a5c2a';
+                ctx.fillRect(0, 0, this.width, this.height);
+                
+                this.drawField();
+                this.drawGoals();
+                
+                ctx.fillStyle = '#4CAF50';
+                ctx.beginPath();
+                ctx.arc(this.player.x, this.player.y, this.params.playerSize, 0, Math.PI * 2);
+                ctx.fill();
+                
+                ctx.fillStyle = '#FFFFFF';
+                ctx.beginPath();
+                ctx.arc(this.ball.x, this.ball.y, this.params.ballSize, 0, Math.PI * 2);
+                ctx.fill();
+                
+                this.drawUI();
+            }
+            
+            drawField() {
+                const ctx = this.ctx;
+                ctx.strokeStyle = '#FFFFFF';
+                ctx.lineWidth = 2;
+                
+                ctx.beginPath();
+                ctx.moveTo(this.width / 2, 0);
+                ctx.lineTo(this.width / 2, this.height);
+                ctx.stroke();
+                
+                ctx.beginPath();
+                ctx.arc(this.width / 2, this.height / 2, 50, 0, Math.PI * 2);
+                ctx.stroke();
+            }
+            
+            drawGoals() {
+                const ctx = this.ctx;
+                ctx.fillStyle = '#FF6B6B';
+                
+                ctx.fillRect(this.leftGoal.x, this.leftGoal.y, this.leftGoal.width, this.leftGoal.height);
+                ctx.fillRect(this.rightGoal.x, this.rightGoal.y, this.rightGoal.width, this.rightGoal.height);
+            }
+            
+            drawUI() {
+                const ctx = this.ctx;
+                ctx.fillStyle = '#FFFFFF';
+                ctx.font = '24px Arial';
+                ctx.textAlign = 'center';
+                
+                ctx.fillText(`Goals: ${this.playerScore}/${this.params.goalsToWin}`, this.width/2, 30);
+                
+                if (this.gameState === 'goalCelebration') {
+                    this.drawGoalCelebration();
+                } else if (this.gameState === 'gameOver') {
+                    ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+                    ctx.fillRect(0, 0, this.width, this.height);
+                    
+                    ctx.fillStyle = '#FFFFFF';
+                    ctx.font = '48px Arial';
+                    ctx.fillText('GAME COMPLETE!', this.width/2, this.height/2 - 20);
+                    ctx.font = '24px Arial';
+                    ctx.fillText('Reload page to play again', this.width/2, this.height/2 + 30);
+                }
+            }
+            
+            drawGoalCelebration() {
+                const ctx = this.ctx;
+                const progress = this.goalCelebrationTimer / this.goalCelebrationDuration;
+                const timeLeft = this.goalCelebrationDuration - this.goalCelebrationTimer;
+                const countdown = Math.ceil(timeLeft / 1000);
+                
+                // Flashy background animation
+                const flashIntensity = Math.sin(this.animationTime * 0.01) * 0.3 + 0.7;
+                ctx.fillStyle = `rgba(255, 215, 0, ${flashIntensity * 0.3})`;
+                ctx.fillRect(0, 0, this.width, this.height);
+                
+                // Pulsing circle animation
+                const pulseSize = 100 + Math.sin(this.animationTime * 0.008) * 30;
+                const gradient = ctx.createRadialGradient(
+                    this.width/2, this.height/2, 0,
+                    this.width/2, this.height/2, pulseSize
+                );
+                gradient.addColorStop(0, 'rgba(255, 215, 0, 0.6)');
+                gradient.addColorStop(1, 'rgba(255, 215, 0, 0)');
+                ctx.fillStyle = gradient;
+                ctx.fillRect(0, 0, this.width, this.height);
+                
+                // Main celebration text
+                ctx.fillStyle = '#FFD700';
+                ctx.font = 'bold 64px Arial';
+                ctx.textAlign = 'center';
+                
+                const textScale = 1 + Math.sin(this.animationTime * 0.006) * 0.1;
+                ctx.save();
+                ctx.translate(this.width/2, this.height/2 - 50);
+                ctx.scale(textScale, textScale);
+                ctx.fillText('GOAL!', 0, 0);
+                ctx.restore();
+                
+                // Countdown
+                ctx.fillStyle = '#FFFFFF';
+                ctx.font = 'bold 48px Arial';
+                
+                const countdownScale = 1 + Math.sin(this.animationTime * 0.01) * 0.2;
+                ctx.save();
+                ctx.translate(this.width/2, this.height/2 + 50);
+                ctx.scale(countdownScale, countdownScale);
+                ctx.fillText(countdown.toString(), 0, 0);
+                ctx.restore();
+                
+                // Sparkling particles effect
+                this.drawSparkles();
+            }
+            
+            drawSparkles() {
+                const ctx = this.ctx;
+                const sparkleCount = 20;
+                
+                for (let i = 0; i < sparkleCount; i++) {
+                    const angle = (i / sparkleCount) * Math.PI * 2 + this.animationTime * 0.003;
+                    const radius = 150 + Math.sin(this.animationTime * 0.005 + i) * 50;
+                    const x = this.width/2 + Math.cos(angle) * radius;
+                    const y = this.height/2 + Math.sin(angle) * radius;
+                    
+                    const sparkleSize = 3 + Math.sin(this.animationTime * 0.01 + i) * 2;
+                    const opacity = 0.5 + Math.sin(this.animationTime * 0.008 + i) * 0.5;
+                    
+                    ctx.fillStyle = `rgba(255, 255, 0, ${opacity})`;
+                    ctx.beginPath();
+                    ctx.arc(x, y, sparkleSize, 0, Math.PI * 2);
+                    ctx.fill();
+                    
+                    // Cross sparkle effect
+                    ctx.strokeStyle = `rgba(255, 255, 255, ${opacity})`;
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    ctx.moveTo(x - sparkleSize * 2, y);
+                    ctx.lineTo(x + sparkleSize * 2, y);
+                    ctx.moveTo(x, y - sparkleSize * 2);
+                    ctx.lineTo(x, y + sparkleSize * 2);
+                    ctx.stroke();
+                }
+            }
+            
+            gameLoop(currentTime = 0) {
+                const deltaTime = currentTime - this.lastTime;
+                this.lastTime = currentTime;
+                
+                this.update(deltaTime);
+                this.render();
+                
+                requestAnimationFrame((time) => this.gameLoop(time));
+            }
+        }
+        
+        window.addEventListener('load', () => {
+            new Game();
+        });
+    </script>
+</body>
+</html> 
