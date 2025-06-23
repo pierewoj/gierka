@@ -181,7 +181,7 @@
         let gameState = 'waiting'; // 'waiting', 'playing', 'gameOver'
         let gameSpeed = 2;
         let baseGameSpeed = 2;
-        let speedIncrementRate = 0.001; // Speed increase per frame
+        let speedIncrementRate = 0.002; // Speed increase per frame
         let score = 0;
         let lives = 3;
         let obstaclesJumped = 0;
@@ -203,7 +203,7 @@
         // Obstacles array
         let obstacles = [];
         let obstacleSpawnTimer = 0;
-        let obstacleSpawnRate = 120; // frames between obstacles
+        let obstacleSpawnRate = 96; // frames between obstacles (20% more frequent)
         let nextObstacleSpawn = 0;
 
         // Background elements
@@ -279,7 +279,7 @@
             obstaclesJumped = 0;
             gameSpeed = baseGameSpeed;
             obstacleSpawnTimer = 0;
-            obstacleSpawnRate = 120;
+            obstacleSpawnRate = 96;
             nextObstacleSpawn = obstacleSpawnRate;
             updateUI();
         }
@@ -317,9 +317,7 @@
 
         function updateGameSpeed() {
             // Continuously increase game speed over time
-            if (gameSpeed < 6) {
-                gameSpeed += speedIncrementRate;
-            }
+            gameSpeed += speedIncrementRate;
         }
 
         function updateObstacles() {
@@ -328,8 +326,8 @@
             if (obstacleSpawnTimer >= nextObstacleSpawn) {
                 spawnObstacle();
                 obstacleSpawnTimer = 0;
-                // Set next spawn time with randomness (current rate + 0 to 50% extra)
-                const randomExtra = Math.random() * (obstacleSpawnRate * 0.5);
+                // Set next spawn time with randomness (current rate + 0 to 75% extra)
+                const randomExtra = Math.random() * (obstacleSpawnRate * 0.75);
                 nextObstacleSpawn = obstacleSpawnRate + randomExtra;
                 
                 // Gradually increase difficulty by reducing spawn rate
@@ -348,6 +346,7 @@
                     obstacle.passed = true;
                     obstaclesJumped++;
                     score += 10;
+                    updateUI();
                 }
 
                 // Remove obstacles that are off screen
