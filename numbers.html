@@ -2,7 +2,7 @@
 <html lang="pl">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Nauka Liczb - Polish Numbers Game</title>
     <style>
         * {
@@ -80,6 +80,17 @@
 
         .number-btn:active:not(:disabled) {
             transform: translateY(0);
+        }
+
+        .number-btn, .say-btn, .clear-btn {
+            touch-action: manipulation;
+            -webkit-tap-highlight-color: transparent;
+            -webkit-touch-callout: none;
+            -webkit-user-select: none;
+            -khtml-user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
+            user-select: none;
         }
 
         .number-btn:disabled {
