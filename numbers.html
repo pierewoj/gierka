@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nauka Liczb - Polish Numbers Game</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Arial', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .game-container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            padding: 30px;
+            max-width: 400px;
+            width: 100%;
+            text-align: center;
+        }
+
+        .title {
+            color: #4a5568;
+            font-size: 24px;
+            font-weight: bold;
+            margin-bottom: 30px;
+        }
+
+        .display {
+            background: #f7fafc;
+            border: 3px solid #e2e8f0;
+            border-radius: 15px;
+            height: 80px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 48px;
+            font-weight: bold;
+            color: #2d3748;
+            margin-bottom: 30px;
+            min-width: 120px;
+        }
+
+        .buttons-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .number-btn {
+            background: linear-gradient(135deg, #4299e1, #3182ce);
+            color: white;
+            border: none;
+            border-radius: 15px;
+            height: 60px;
+            font-size: 24px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+
+        .number-btn:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 12px rgba(0,0,0,0.15);
+        }
+
+        .number-btn:active:not(:disabled) {
+            transform: translateY(0);
+        }
+
+        .number-btn:disabled {
+            background: #cbd5e0;
+            color: #a0aec0;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+        }
+
+        .say-btn {
+            background: linear-gradient(135deg, #48bb78, #38a169);
+            color: white;
+            border: none;
+            border-radius: 15px;
+            padding: 15px 25px;
+            font-size: 18px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            flex: 1;
+        }
+
+        .say-btn:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 12px rgba(0,0,0,0.15);
+        }
+
+        .say-btn:disabled {
+            background: #cbd5e0;
+            color: #a0aec0;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+
+        .clear-btn {
+            background: linear-gradient(135deg, #f56565, #e53e3e);
+            color: white;
+            border: none;
+            border-radius: 15px;
+            padding: 15px 20px;
+            font-size: 18px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+
+        .clear-btn:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 12px rgba(0,0,0,0.15);
+        }
+
+        .clear-btn:disabled {
+            background: #cbd5e0;
+            color: #a0aec0;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+
+        .pronunciation {
+            margin-top: 20px;
+            font-size: 18px;
+            color: #4a5568;
+            font-style: italic;
+            min-height: 25px;
+        }
+
+        @media (max-width: 480px) {
+            .game-container {
+                padding: 20px;
+            }
+            
+            .number-btn {
+                height: 50px;
+                font-size: 20px;
+            }
+            
+            .display {
+                height: 70px;
+                font-size: 40px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <h1 class="title">🔢 Nauka Liczb</h1>
+        
+        <div class="display" id="display">--</div>
+        
+        <div class="buttons-grid">
+            <button class="number-btn" onclick="addDigit(7)">7</button>
+            <button class="number-btn" onclick="addDigit(8)">8</button>
+            <button class="number-btn" onclick="addDigit(9)">9</button>
+            <button class="number-btn" onclick="addDigit(4)">4</button>
+            <button class="number-btn" onclick="addDigit(5)">5</button>
+            <button class="number-btn" onclick="addDigit(6)">6</button>
+            <button class="number-btn" onclick="addDigit(1)">1</button>
+            <button class="number-btn" onclick="addDigit(2)">2</button>
+            <button class="number-btn" onclick="addDigit(3)">3</button>
+            <button class="number-btn" onclick="addDigit(0)" id="zeroBtn">0</button>
+            <div></div>
+            <div></div>
+        </div>
+        
+        <div class="action-buttons">
+            <button class="say-btn" onclick="sayNumber()" id="sayBtn">🔊 Powiedz</button>
+            <button class="clear-btn" onclick="clearNumber()" id="clearBtn">🗑️ Wyczyść</button>
+        </div>
+        
+        <div class="pronunciation" id="pronunciation"></div>
+    </div>
+
+    <script>
+        let currentNumber = '';
+        
+        // Polish number names
+        const polishNumbers = {
+            10: 'dziesięć',
+            11: 'jedenaście',
+            12: 'dwanaście',
+            13: 'trzynaście',
+            14: 'czternaście',
+            15: 'piętnaście',
+            16: 'szesnaście',
+            17: 'siedemnaście',
+            18: 'osiemnaście',
+            19: 'dziewiętnaście',
+            20: 'dwadzieścia',
+            30: 'trzydzieści',
+            40: 'czterdzieści',
+            50: 'pięćdziesiąt',
+            60: 'sześćdziesiąt',
+            70: 'siedemdziesiąt',
+            80: 'osiemdziesiąt',
+            90: 'dziewięćdziesiąt'
+        };
+        
+        const units = ['', 'jeden', 'dwa', 'trzy', 'cztery', 'pięć', 'sześć', 'siedem', 'osiem', 'dziewięć'];
+        
+        function numberToPolish(num) {
+            if (num < 10) {
+                return units[num];
+            }
+            
+            if (polishNumbers[num]) {
+                return polishNumbers[num];
+            }
+            
+            const tens = Math.floor(num / 10) * 10;
+            const ones = num % 10;
+            
+            if (ones === 0) {
+                return polishNumbers[tens];
+            }
+            
+            return polishNumbers[tens] + ' ' + units[ones];
+        }
+        
+        function addDigit(digit) {
+            if (currentNumber.length < 2) {
+                if (currentNumber === '' && digit === 0) {
+                    return; // Don't allow starting with 0
+                }
+                currentNumber += digit.toString();
+                updateDisplay();
+                updateButtonStates();
+            }
+        }
+        
+        function clearNumber() {
+            currentNumber = '';
+            updateDisplay();
+            updateButtonStates();
+            document.getElementById('pronunciation').textContent = '';
+        }
+        
+        function sayNumber() {
+            if (currentNumber !== '') {
+                const num = parseInt(currentNumber);
+                const polishName = numberToPolish(num);
+                document.getElementById('pronunciation').textContent = polishName;
+                
+                // Try to use speech synthesis if available
+                if ('speechSynthesis' in window) {
+                    const utterance = new SpeechSynthesisUtterance(polishName);
+                    utterance.lang = 'pl-PL';
+                    utterance.rate = 0.8;
+                    speechSynthesis.speak(utterance);
+                }
+            }
+        }
+        
+        function updateDisplay() {
+            const display = document.getElementById('display');
+            if (currentNumber === '') {
+                display.textContent = '--';
+            } else {
+                display.textContent = currentNumber;
+            }
+        }
+        
+        function updateButtonStates() {
+            const zeroBtn = document.getElementById('zeroBtn');
+            const sayBtn = document.getElementById('sayBtn');
+            const clearBtn = document.getElementById('clearBtn');
+            const numberBtns = document.querySelectorAll('.number-btn');
+            
+            // Disable/enable zero button
+            zeroBtn.disabled = currentNumber === '';
+            
+            // Disable/enable say and clear buttons
+            sayBtn.disabled = currentNumber === '';
+            clearBtn.disabled = currentNumber === '';
+            
+            // Disable all number buttons if we have 2 digits
+            if (currentNumber.length >= 2) {
+                numberBtns.forEach(btn => btn.disabled = true);
+            } else {
+                numberBtns.forEach(btn => {
+                    if (btn.id === 'zeroBtn') {
+                        btn.disabled = currentNumber === '';
+                    } else {
+                        btn.disabled = false;
+                    }
+                });
+            }
+        }
+        
+        // Initialize the game
+        updateDisplay();
+        updateButtonStates();
+    </script>
+</body>
+</html>
