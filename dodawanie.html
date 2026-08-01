@@ -1,0 +1,615 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Dodawanie - Addition Game</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Arial', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .game-container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            padding: 30px;
+            max-width: 420px;
+            width: 100%;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .title {
+            color: #4a5568;
+            font-size: 24px;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+
+        .score {
+            color: #4a5568;
+            font-size: 18px;
+            font-weight: bold;
+            margin-bottom: 25px;
+        }
+
+        .score span {
+            color: #38a169;
+            font-size: 22px;
+        }
+
+        .question {
+            background: #f7fafc;
+            border: 3px solid #e2e8f0;
+            border-radius: 15px;
+            min-height: 90px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 42px;
+            font-weight: bold;
+            color: #2d3748;
+            margin-bottom: 30px;
+            letter-spacing: 2px;
+        }
+
+        .answers-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+        }
+
+        .answer-btn {
+            background: linear-gradient(135deg, #4299e1, #3182ce);
+            color: white;
+            border: none;
+            border-radius: 15px;
+            height: 70px;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            touch-action: manipulation;
+            -webkit-tap-highlight-color: transparent;
+            -webkit-user-select: none;
+            user-select: none;
+        }
+
+        .answer-btn:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 12px rgba(0,0,0,0.15);
+        }
+
+        .answer-btn:active:not(:disabled) {
+            transform: translateY(0);
+        }
+
+        .answer-btn.correct {
+            background: linear-gradient(135deg, #48bb78, #38a169);
+            animation: pop 0.4s ease;
+        }
+
+        .answer-btn.incorrect {
+            background: linear-gradient(135deg, #f56565, #e53e3e);
+            animation: shake 0.4s ease;
+        }
+
+        .answer-btn:disabled {
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        @keyframes pop {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.15); }
+            100% { transform: scale(1); }
+        }
+
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-6px); }
+            75% { transform: translateX(6px); }
+        }
+
+        .celebration {
+            position: absolute;
+            inset: 0;
+            background: rgba(255, 255, 255, 0.96);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.25s ease;
+        }
+
+        .celebration.show {
+            opacity: 1;
+        }
+
+        .celebration-animals {
+            display: flex;
+            gap: 10px;
+            font-size: 48px;
+            margin-bottom: 15px;
+        }
+
+        .dancing-animal {
+            display: inline-block;
+            animation: dance 0.6s ease-in-out infinite;
+        }
+
+        @keyframes dance {
+            0%, 100% { transform: translateY(0) rotate(-12deg); }
+            50% { transform: translateY(-25px) rotate(12deg); }
+        }
+
+        .celebration-text {
+            font-size: 26px;
+            font-weight: bold;
+            color: #38a169;
+        }
+
+        .floating-poo {
+            position: absolute;
+            left: 50%;
+            bottom: 10px;
+            font-size: 56px;
+            transform: translateX(-50%);
+            animation: floatPoo 1.4s ease-in forwards;
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        @keyframes floatPoo {
+            0% { transform: translate(-50%, 0) rotate(0deg); opacity: 1; }
+            60% { opacity: 1; }
+            100% { transform: translate(-50%, -320px) rotate(360deg); opacity: 0; }
+        }
+
+        @media (max-width: 480px) {
+            .game-container {
+                padding: 20px;
+            }
+
+            .answer-btn {
+                height: 60px;
+                font-size: 24px;
+            }
+
+            .question {
+                min-height: 80px;
+                font-size: 34px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <h1 class="title">➕ Dodawanie</h1>
+        <div class="score">Punkty: <span id="score">0</span></div>
+
+        <div class="question" id="question">-- + -- = ?</div>
+
+        <div class="answers-grid" id="answers"></div>
+
+        <div class="celebration" id="celebration">
+            <div class="celebration-animals" id="celebrationAnimals"></div>
+            <div class="celebration-text">Brawo! 🎉</div>
+        </div>
+    </div>
+
+    <script>
+        let score = 0;
+        let currentAnswer = null;
+        let locked = false;
+
+        const ANIMALS = ['🐶', '🐱', '🐰', '🦊', '🐻', '🐼', '🐸', '🐵'];
+
+        // Adaptive difficulty: addends start in [1, MIN_DIFFICULTY]. The first
+        // few questions always stay easy; after that the range keeps adjusting
+        // up or down based on recent performance, targeting an ~80% success rate.
+        const MIN_DIFFICULTY = 3;
+        const MAX_DIFFICULTY = 15;
+        const EASY_START_QUESTIONS = 2;
+        const STEP_UP = 3;
+        const STEP_DOWN = 1;
+        const TARGET_SUCCESS_RATE = 0.8;
+        const RESULTS_WINDOW = 5;
+
+        let difficulty = MIN_DIFFICULTY;
+        let questionsAnswered = 0;
+        let recentResults = [];
+        let hadMistakeThisQuestion = false;
+
+        function updateDifficulty(correctFirstTry) {
+            questionsAnswered++;
+            recentResults.push(correctFirstTry);
+            if (recentResults.length > RESULTS_WINDOW) recentResults.shift();
+
+            if (questionsAnswered <= EASY_START_QUESTIONS) {
+                return; // keep the first few questions easy no matter what
+            }
+
+            const successRate = recentResults.reduce((sum, ok) => sum + (ok ? 1 : 0), 0) / recentResults.length;
+
+            if (correctFirstTry) {
+                // Only step up while recent performance supports it, so the
+                // game keeps settling near an ~80% success rate as we play.
+                if (successRate >= TARGET_SUCCESS_RATE) {
+                    difficulty = Math.min(MAX_DIFFICULTY, difficulty + STEP_UP);
+                }
+            } else {
+                difficulty = Math.max(MIN_DIFFICULTY, difficulty - STEP_DOWN);
+            }
+        }
+
+        function shuffle(arr) {
+            const a = arr.slice();
+            for (let i = a.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [a[i], a[j]] = [a[j], a[i]];
+            }
+            return a;
+        }
+
+        function generateOptions(correct, maxSum) {
+            const opts = new Set([correct]);
+            let attempts = 0;
+            while (opts.size < 3 && attempts < 50) {
+                attempts++;
+                const delta = Math.floor(Math.random() * 9) - 4; // -4..4
+                const candidate = correct + delta;
+                if (candidate >= 1 && candidate <= maxSum) {
+                    opts.add(candidate);
+                }
+            }
+            let filler = 1;
+            while (opts.size < 3 && filler <= maxSum) {
+                opts.add(filler);
+                filler++;
+            }
+            return shuffle([...opts]);
+        }
+
+        function newQuestion() {
+            hadMistakeThisQuestion = false;
+
+            const maxAddend = Math.round(difficulty);
+            const a = Math.floor(Math.random() * maxAddend) + 1;
+            const b = Math.floor(Math.random() * maxAddend) + 1;
+            currentAnswer = a + b;
+
+            document.getElementById('question').textContent = `${a} + ${b} = ?`;
+
+            const answersDiv = document.getElementById('answers');
+            answersDiv.innerHTML = '';
+            generateOptions(currentAnswer, maxAddend * 2).forEach(value => {
+                const btn = document.createElement('button');
+                btn.className = 'answer-btn';
+                btn.textContent = value;
+                btn.onclick = () => checkAnswer(value, btn);
+                answersDiv.appendChild(btn);
+            });
+
+            locked = false;
+        }
+
+        function checkAnswer(value, btn) {
+            if (locked || btn.disabled) return;
+
+            if (value === currentAnswer) {
+                locked = true;
+                btn.classList.add('correct');
+                document.querySelectorAll('.answer-btn').forEach(b => b.disabled = true);
+
+                score++;
+                document.getElementById('score').textContent = score;
+
+                updateDifficulty(!hadMistakeThisQuestion);
+
+                celebrate();
+                setTimeout(newQuestion, 1600);
+            } else {
+                hadMistakeThisQuestion = true;
+                btn.classList.add('incorrect');
+                btn.disabled = true;
+            }
+        }
+
+        function celebrate() {
+            const container = document.getElementById('celebration');
+            const animalsDiv = document.getElementById('celebrationAnimals');
+            animalsDiv.innerHTML = '';
+
+            shuffle(ANIMALS).slice(0, 4).forEach((animal, i) => {
+                const span = document.createElement('span');
+                span.textContent = animal;
+                span.className = 'dancing-animal';
+                span.style.animationDelay = `${i * 0.1}s`;
+                animalsDiv.appendChild(span);
+            });
+
+            container.classList.add('show');
+            setTimeout(() => container.classList.remove('show'), 1300);
+
+            if (Math.random() < 0.1) {
+                const poo = document.createElement('span');
+                poo.textContent = '💩';
+                poo.className = 'floating-poo';
+                document.querySelector('.game-container').appendChild(poo);
+                setTimeout(() => poo.remove(), 1400);
+            }
+
+            playYaySound();
+        }
+
+        let audioCtx = null;
+
+        function getAudioCtx() {
+            const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+            if (!AudioContextClass) return null;
+            if (!audioCtx) audioCtx = new AudioContextClass();
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            return audioCtx;
+        }
+
+        function playTone(ctx, freq, startTime, duration, peakGain, type) {
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.type = type || 'triangle';
+            osc.frequency.setValueAtTime(freq, startTime);
+            gain.gain.setValueAtTime(0, startTime);
+            gain.gain.linearRampToValueAtTime(peakGain, startTime + 0.02);
+            gain.gain.exponentialRampToValueAtTime(0.001, startTime + duration);
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.start(startTime);
+            osc.stop(startTime + duration);
+        }
+
+        function playSweep(ctx, freqStart, freqEnd, startTime, duration, peakGain, type) {
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.type = type || 'sine';
+            osc.frequency.setValueAtTime(freqStart, startTime);
+            osc.frequency.exponentialRampToValueAtTime(freqEnd, startTime + duration);
+            gain.gain.setValueAtTime(0, startTime);
+            gain.gain.linearRampToValueAtTime(peakGain, startTime + 0.03);
+            gain.gain.exponentialRampToValueAtTime(0.001, startTime + duration);
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.start(startTime);
+            osc.stop(startTime + duration);
+        }
+
+        function createNoiseBuffer(ctx, duration) {
+            const length = Math.floor(ctx.sampleRate * duration);
+            const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
+            const data = buffer.getChannelData(0);
+            for (let i = 0; i < length; i++) {
+                data[i] = Math.random() * 2 - 1;
+            }
+            return buffer;
+        }
+
+        const SOUND_EFFECTS = [
+            // Ta-da fanfare: rising arpeggio + held major chord
+            function fanfare(ctx, now) {
+                const arpeggio = [523.25, 659.25, 783.99, 1046.50]; // C5 E5 G5 C6
+                const noteGap = 0.11;
+                arpeggio.forEach((freq, i) => playTone(ctx, freq, now + i * noteGap, 0.2, 0.25, 'triangle'));
+                const chordStart = now + arpeggio.length * noteGap;
+                [1046.50, 1318.51, 1567.98].forEach(freq => playTone(ctx, freq, chordStart, 0.7, 0.2, 'triangle'));
+            },
+            // Cartoon spring "boing"
+            function boing(ctx, now) {
+                playSweep(ctx, 900, 150, now, 0.25, 0.3, 'sine');
+                playSweep(ctx, 400, 250, now + 0.22, 0.15, 0.15, 'sine');
+            },
+            // Bubbly ascending pops
+            function bubbles(ctx, now) {
+                [700, 900, 1100, 1400, 1800].forEach((freq, i) => {
+                    playTone(ctx, freq, now + i * 0.09, 0.12, 0.22, 'sine');
+                });
+            },
+            // Slide whistle "wheee!"
+            function slideWhistle(ctx, now) {
+                playSweep(ctx, 300, 1400, now, 0.35, 0.25, 'triangle');
+            },
+            // Wobbly kazoo voice
+            function kazoo(ctx, now) {
+                const duration = 0.5;
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                const lfo = ctx.createOscillator();
+                const lfoGain = ctx.createGain();
+
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(440, now);
+
+                lfo.type = 'sine';
+                lfo.frequency.setValueAtTime(7, now);
+                lfoGain.gain.setValueAtTime(25, now);
+                lfo.connect(lfoGain);
+                lfoGain.connect(osc.frequency);
+
+                gain.gain.setValueAtTime(0, now);
+                gain.gain.linearRampToValueAtTime(0.2, now + 0.03);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+
+                osc.start(now);
+                lfo.start(now);
+                osc.stop(now + duration);
+                lfo.stop(now + duration);
+            },
+            // Silly cartoon fart / raspberry
+            function raspberry(ctx, now) {
+                const duration = 0.55;
+                const noise = ctx.createBufferSource();
+                noise.buffer = createNoiseBuffer(ctx, duration);
+
+                const filter = ctx.createBiquadFilter();
+                filter.type = 'lowpass';
+                filter.frequency.setValueAtTime(400, now);
+                filter.frequency.exponentialRampToValueAtTime(80, now + duration);
+                filter.Q.setValueAtTime(8, now);
+
+                const gain = ctx.createGain();
+                gain.gain.setValueAtTime(0.35, now);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+
+                const wobble = ctx.createOscillator();
+                wobble.type = 'square';
+                wobble.frequency.setValueAtTime(40, now);
+                const wobbleGain = ctx.createGain();
+                wobbleGain.gain.setValueAtTime(0.15, now);
+                wobble.connect(wobbleGain);
+                wobbleGain.connect(gain.gain);
+
+                noise.connect(filter);
+                filter.connect(gain);
+                gain.connect(ctx.destination);
+
+                noise.start(now);
+                wobble.start(now);
+                noise.stop(now + duration);
+                wobble.stop(now + duration);
+            },
+            // Playful cartoon cat "meow"
+            function meow(ctx, now) {
+                const duration = 0.45;
+                const osc = ctx.createOscillator();
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(300, now);
+                osc.frequency.linearRampToValueAtTime(650, now + duration * 0.35);
+                osc.frequency.linearRampToValueAtTime(350, now + duration);
+
+                const filter = ctx.createBiquadFilter();
+                filter.type = 'bandpass';
+                filter.frequency.setValueAtTime(1200, now);
+                filter.Q.setValueAtTime(3, now);
+
+                const gain = ctx.createGain();
+                gain.gain.setValueAtTime(0, now);
+                gain.gain.linearRampToValueAtTime(0.25, now + 0.05);
+                gain.gain.linearRampToValueAtTime(0.2, now + duration * 0.6);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+
+                osc.connect(filter);
+                filter.connect(gain);
+                gain.connect(ctx.destination);
+
+                osc.start(now);
+                osc.stop(now + duration);
+            },
+            // Cuckoo clock
+            function cuckoo(ctx, now) {
+                [783.99, 659.25, 783.99, 659.25].forEach((freq, i) => { // G5 E5 G5 E5
+                    playTone(ctx, freq, now + i * 0.25, 0.2, 0.25, 'sine');
+                });
+            },
+            // Duck quack
+            function quack(ctx, now) {
+                playSweep(ctx, 500, 200, now, 0.12, 0.3, 'sawtooth');
+                playSweep(ctx, 480, 190, now + 0.18, 0.12, 0.25, 'sawtooth');
+            },
+            // Drum roll + cymbal crash
+            function drumroll(ctx, now) {
+                for (let i = 0; i < 8; i++) {
+                    const t = now + i * 0.05;
+                    const noise = ctx.createBufferSource();
+                    noise.buffer = createNoiseBuffer(ctx, 0.04);
+                    const filter = ctx.createBiquadFilter();
+                    filter.type = 'bandpass';
+                    filter.frequency.setValueAtTime(200, t);
+                    const gain = ctx.createGain();
+                    gain.gain.setValueAtTime(0.2, t);
+                    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.04);
+                    noise.connect(filter);
+                    filter.connect(gain);
+                    gain.connect(ctx.destination);
+                    noise.start(t);
+                    noise.stop(t + 0.04);
+                }
+                const crashStart = now + 0.42;
+                const crashNoise = ctx.createBufferSource();
+                crashNoise.buffer = createNoiseBuffer(ctx, 0.6);
+                const crashFilter = ctx.createBiquadFilter();
+                crashFilter.type = 'highpass';
+                crashFilter.frequency.setValueAtTime(3000, crashStart);
+                const crashGain = ctx.createGain();
+                crashGain.gain.setValueAtTime(0.3, crashStart);
+                crashGain.gain.exponentialRampToValueAtTime(0.001, crashStart + 0.6);
+                crashNoise.connect(crashFilter);
+                crashFilter.connect(crashGain);
+                crashGain.connect(ctx.destination);
+                crashNoise.start(crashStart);
+                crashNoise.stop(crashStart + 0.6);
+            },
+            // Tiny crowd applause
+            function applause(ctx, now) {
+                const duration = 0.7;
+                for (let i = 0; i < 20; i++) {
+                    const t = now + Math.random() * duration;
+                    const noise = ctx.createBufferSource();
+                    noise.buffer = createNoiseBuffer(ctx, 0.03);
+                    const filter = ctx.createBiquadFilter();
+                    filter.type = 'bandpass';
+                    filter.frequency.setValueAtTime(1500 + Math.random() * 1500, t);
+                    const gain = ctx.createGain();
+                    gain.gain.setValueAtTime(0.12, t);
+                    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.03);
+                    noise.connect(filter);
+                    filter.connect(gain);
+                    gain.connect(ctx.destination);
+                    noise.start(t);
+                    noise.stop(t + 0.03);
+                }
+            },
+            // Robot beep-boop
+            function robot(ctx, now) {
+                [440, 550, 660, 880].forEach((freq, i) => {
+                    playTone(ctx, freq, now + i * 0.1, 0.09, 0.2, 'square');
+                });
+            },
+        ];
+
+        let lastSoundIndex = -1;
+
+        function playYaySound() {
+            const ctx = getAudioCtx();
+            if (!ctx) return;
+
+            let index = Math.floor(Math.random() * SOUND_EFFECTS.length);
+            if (SOUND_EFFECTS.length > 1 && index === lastSoundIndex) {
+                index = (index + 1) % SOUND_EFFECTS.length;
+            }
+            lastSoundIndex = index;
+
+            SOUND_EFFECTS[index](ctx, ctx.currentTime);
+        }
+
+        newQuestion();
+    </script>
+</body>
+</html>
