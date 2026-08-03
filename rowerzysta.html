@@ -1,0 +1,1775 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mały rowerzysta - Gierkomat</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: #16324a;
+            font-family: Arial, sans-serif;
+            overflow: hidden;
+            touch-action: manipulation;
+        }
+
+        #gameContainer {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #gameCanvas {
+            display: block;
+            border-radius: 6px;
+            box-shadow: 0 0 24px rgba(0, 0, 0, 0.5);
+        }
+
+        #instructions {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            /* Without an explicit width, an absolutely positioned box at
+               left:50% may only use half the screen - which makes it very
+               tall and narrow on a phone. */
+            width: max-content;
+            max-width: min(92vw, 520px);
+            box-sizing: border-box;
+            text-align: center;
+            color: #22313f;
+            font-size: 20px;
+            line-height: 1.45;
+            background: rgba(255, 255, 255, 0.94);
+            padding: 26px 30px;
+            border-radius: 15px;
+            border: 3px solid #22313f;
+            box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
+        }
+
+        #instructions h2 {
+            margin: 0 0 10px;
+            font-size: 28px;
+        }
+
+        #instructions p {
+            margin: 8px 0;
+        }
+
+        #instructions .keys {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 8px;
+            margin: 14px 0;
+        }
+
+        #instructions .key {
+            border: 2px solid #22313f;
+            border-radius: 8px;
+            padding: 6px 12px;
+            font-weight: bold;
+            background: #f2f6f8;
+            font-size: 17px;
+        }
+
+        #instructions .start {
+            font-weight: bold;
+            color: #c0392b;
+            font-size: 22px;
+        }
+
+        @media (max-width: 768px) {
+            #instructions {
+                font-size: 17px;
+                padding: 18px 20px;
+            }
+            #instructions h2 { font-size: 23px; }
+            #instructions .key { font-size: 15px; }
+        }
+    </style>
+    <style>
+        .back-to-menu {
+            position: fixed;
+            bottom: 14px;
+            left: 14px;
+            z-index: 1000;
+            padding: 10px 16px;
+            background: rgba(255, 255, 255, 0.92);
+            border: 2px solid #2d2b45;
+            border-radius: 12px;
+            color: #2d2b45;
+            font-family: Arial, sans-serif;
+            font-size: 16px;
+            font-weight: bold;
+            text-decoration: none;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+        }
+
+        .back-to-menu:hover {
+            background: #ffffff;
+        }
+    </style>
+</head>
+<body>
+    <a class="back-to-menu" href="index.html">← Menu</a>
+
+    <div id="gameContainer">
+        <canvas id="gameCanvas"></canvas>
+
+        <div id="instructions">
+            <h2>🚲 Mały rowerzysta</h2>
+            <p>Spokojna przejażdżka dookoła Jeziora Długiego w Olsztynie.
+               Wyprzedzaj innych rowerzystów i uważaj na tych, którzy jadą z naprzeciwka!</p>
+            <div class="keys">
+                <span class="key">⬆️ pedałuj</span>
+                <span class="key">⬇️ hamuj</span>
+                <span class="key">⬅️ ➡️ skręcaj</span>
+            </div>
+            <p>🎮 Pad: lewa gałka albo krzyżak, <strong>X</strong> - pedałuj, <strong>O</strong> - hamuj</p>
+            <p>Przy jeziorze wybierasz: w lewo na <strong>most</strong> albo prosto do <strong>lasu</strong>.</p>
+            <p class="start">Naciśnij dowolny klawisz, żeby zacząć!</p>
+        </div>
+    </div>
+
+    <script>
+    (function () {
+        'use strict';
+
+        // ------------------------------------------------------------------
+        // Basics
+        // ------------------------------------------------------------------
+        const GW = 1000;                 // logical game width
+        const GH = 600;                  // logical game height
+
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const instructions = document.getElementById('instructions');
+
+        let renderScale = 1;
+
+        function resizeCanvas() {
+            const dpr = Math.min(window.devicePixelRatio || 1, 2);
+            const fit = Math.min(window.innerWidth / GW, window.innerHeight / GH);
+            const cssW = Math.max(320, Math.floor(GW * fit));
+            const cssH = Math.floor(cssW * GH / GW);
+            canvas.style.width = cssW + 'px';
+            canvas.style.height = cssH + 'px';
+            canvas.width = Math.floor(cssW * dpr);
+            canvas.height = Math.floor(cssH * dpr);
+            renderScale = (cssW * dpr) / GW;
+        }
+
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        // ------------------------------------------------------------------
+        // Small helpers
+        // ------------------------------------------------------------------
+        const clamp = (v, a, b) => v < a ? a : (v > b ? b : v);
+        const lerp = (a, b, t) => a + (b - a) * t;
+        const easeIn = (a, b, p) => a + (b - a) * p * p;
+        const easeInOut = (a, b, p) => a + (b - a) * (0.5 - Math.cos(p * Math.PI) / 2);
+
+        // Deterministic randomness - both track variants must decorate their
+        // shared beginning in exactly the same way.
+        function rng(seed) {
+            let s = seed >>> 0;
+            return () => (s = (s * 1664525 + 1013904223) >>> 0) / 4294967296;
+        }
+
+        function roundRect(g, x, y, w, h, r) {
+            g.beginPath();
+            g.moveTo(x + r, y);
+            g.lineTo(x + w - r, y);
+            g.quadraticCurveTo(x + w, y, x + w, y + r);
+            g.lineTo(x + w, y + h - r);
+            g.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+            g.lineTo(x + r, y + h);
+            g.quadraticCurveTo(x, y + h, x, y + h - r);
+            g.lineTo(x, y + r);
+            g.quadraticCurveTo(x, y, x + r, y);
+            g.closePath();
+        }
+
+        function poly(g, x1, y1, x2, y2, x3, y3, x4, y4, color) {
+            g.fillStyle = color;
+            g.beginPath();
+            g.moveTo(x1, y1);
+            g.lineTo(x2, y2);
+            g.lineTo(x3, y3);
+            g.lineTo(x4, y4);
+            g.closePath();
+            g.fill();
+        }
+
+        // ------------------------------------------------------------------
+        // Sprites - everything is drawn once into an offscreen canvas and then
+        // blitted scaled, so the road can be full of trees without a cost.
+        // ------------------------------------------------------------------
+        function makeSprite(w, h, draw) {
+            const c = document.createElement('canvas');
+            c.width = w;
+            c.height = h;
+            draw(c.getContext('2d'), w, h);
+            return c;
+        }
+
+        // worldW is the sprite width in world units (the road is 2 * ROAD_WIDTH wide).
+        function spr(img, worldW) {
+            return { img: img, worldW: worldW };
+        }
+
+        function drawPine(g, w, h) {
+            g.fillStyle = '#6b4a2b';
+            g.fillRect(w / 2 - 6, h - 48, 12, 48);
+            const greens = ['#2f6b34', '#357a3a', '#3c8a41'];
+            for (let i = 0; i < 3; i++) {
+                const top = 8 + i * 52;
+                const bottom = top + 90;
+                const spread = 26 + i * 17;
+                g.fillStyle = greens[i];
+                g.beginPath();
+                g.moveTo(w / 2, top);
+                g.lineTo(w / 2 + spread, bottom);
+                g.lineTo(w / 2 - spread, bottom);
+                g.closePath();
+                g.fill();
+            }
+        }
+
+        function drawOak(g, w, h) {
+            g.fillStyle = '#7a5330';
+            g.fillRect(w / 2 - 8, h - 55, 16, 55);
+            const blobs = [[0, 62, 46], [-32, 88, 34], [32, 86, 36], [-14, 40, 30], [18, 44, 28]];
+            g.fillStyle = '#3f8f45';
+            for (const b of blobs) {
+                g.beginPath();
+                g.arc(w / 2 + b[0], b[1], b[2], 0, Math.PI * 2);
+                g.fill();
+            }
+            g.fillStyle = 'rgba(255,255,255,0.14)';
+            g.beginPath();
+            g.arc(w / 2 - 16, 48, 22, 0, Math.PI * 2);
+            g.fill();
+        }
+
+        function drawBirch(g, w, h) {
+            g.fillStyle = '#eceae2';
+            g.fillRect(w / 2 - 6, h - 110, 12, 110);
+            g.fillStyle = '#3a3a3a';
+            for (let i = 0; i < 5; i++) {
+                g.fillRect(w / 2 - 6, h - 100 + i * 20, 7, 4);
+            }
+            g.fillStyle = '#63a94a';
+            const blobs = [[0, 55, 40], [-26, 78, 28], [26, 76, 30]];
+            for (const b of blobs) {
+                g.beginPath();
+                g.arc(w / 2 + b[0], b[1], b[2], 0, Math.PI * 2);
+                g.fill();
+            }
+        }
+
+        function drawBush(g, w, h) {
+            g.fillStyle = '#4c9a4f';
+            const blobs = [[w / 2, h - 22, 24], [w / 2 - 24, h - 14, 18], [w / 2 + 24, h - 15, 19]];
+            for (const b of blobs) {
+                g.beginPath();
+                g.arc(b[0], b[1], b[2], 0, Math.PI * 2);
+                g.fill();
+            }
+        }
+
+        function drawReeds(g, w, h) {
+            g.strokeStyle = '#4f8a3a';
+            g.lineWidth = 4;
+            for (let i = 0; i < 7; i++) {
+                const x = 12 + i * 11;
+                g.beginPath();
+                g.moveTo(x, h);
+                g.quadraticCurveTo(x - 6 + (i % 3) * 5, h - 40, x - 10 + (i % 4) * 7, h - 78);
+                g.stroke();
+            }
+            g.fillStyle = '#8a5a2b';
+            for (let i = 0; i < 3; i++) {
+                g.beginPath();
+                g.ellipse(24 + i * 22, 16 + (i % 2) * 10, 4, 11, 0, 0, Math.PI * 2);
+                g.fill();
+            }
+        }
+
+        function drawBench(g, w, h) {
+            g.fillStyle = '#6b4a2b';
+            g.fillRect(16, h - 22, 8, 22);
+            g.fillRect(w - 24, h - 22, 8, 22);
+            g.fillStyle = '#a2703f';
+            g.fillRect(8, h - 30, w - 16, 9);
+            g.fillRect(8, h - 56, w - 16, 8);
+            g.fillRect(8, h - 44, w - 16, 8);
+        }
+
+        function drawLamp(g, w, h) {
+            g.fillStyle = '#4a5560';
+            g.fillRect(w / 2 - 4, 24, 8, h - 24);
+            g.beginPath();
+            g.moveTo(w / 2 - 4, 30);
+            g.quadraticCurveTo(w / 2 - 4, 8, w / 2 + 14, 12);
+            g.lineWidth = 7;
+            g.strokeStyle = '#4a5560';
+            g.stroke();
+            g.fillStyle = '#f7f0c8';
+            g.beginPath();
+            g.ellipse(w / 2 + 16, 16, 10, 7, 0, 0, Math.PI * 2);
+            g.fill();
+        }
+
+        function drawRock(g, w, h) {
+            g.fillStyle = '#8d8f92';
+            g.beginPath();
+            g.ellipse(w / 2, h - 16, 34, 22, 0, 0, Math.PI * 2);
+            g.fill();
+            g.fillStyle = '#a3a5a8';
+            g.beginPath();
+            g.ellipse(w / 2 - 10, h - 26, 16, 11, 0, 0, Math.PI * 2);
+            g.fill();
+        }
+
+        function drawBoat(g, w, h) {
+            g.fillStyle = '#d8452f';
+            g.beginPath();
+            g.moveTo(10, h - 34);
+            g.lineTo(w - 10, h - 34);
+            g.lineTo(w - 28, h - 8);
+            g.lineTo(28, h - 8);
+            g.closePath();
+            g.fill();
+            g.fillStyle = '#f0e6d2';
+            g.fillRect(10, h - 38, w - 20, 6);
+            // a tiny person with a paddle
+            g.fillStyle = '#f5c9a6';
+            g.beginPath();
+            g.arc(w / 2, h - 62, 9, 0, Math.PI * 2);
+            g.fill();
+            g.fillStyle = '#2e86c1';
+            g.fillRect(w / 2 - 11, h - 54, 22, 18);
+            g.strokeStyle = '#7a5330';
+            g.lineWidth = 5;
+            g.beginPath();
+            g.moveTo(w / 2 - 30, h - 30);
+            g.lineTo(w / 2 + 26, h - 58);
+            g.stroke();
+        }
+
+        function drawCar(body, roof) {
+            return function (g, w, h) {
+                const wheelY = h - 12;
+                g.fillStyle = '#22252a';
+                g.beginPath();
+                g.arc(46, wheelY, 13, 0, Math.PI * 2);
+                g.arc(w - 46, wheelY, 13, 0, Math.PI * 2);
+                g.fill();
+                g.fillStyle = '#5c6167';
+                g.beginPath();
+                g.arc(46, wheelY, 5, 0, Math.PI * 2);
+                g.arc(w - 46, wheelY, 5, 0, Math.PI * 2);
+                g.fill();
+
+                // cabin
+                g.fillStyle = roof;
+                g.beginPath();
+                g.moveTo(56, h - 52);
+                g.lineTo(72, 8);
+                g.lineTo(w - 74, 8);
+                g.lineTo(w - 54, h - 52);
+                g.closePath();
+                g.fill();
+                g.fillStyle = '#bcd8e8';
+                g.beginPath();
+                g.moveTo(63, h - 56);
+                g.lineTo(75, 15);
+                g.lineTo(w / 2 - 3, 15);
+                g.lineTo(w / 2 - 3, h - 56);
+                g.closePath();
+                g.fill();
+                g.beginPath();
+                g.moveTo(w / 2 + 3, h - 56);
+                g.lineTo(w / 2 + 3, 15);
+                g.lineTo(w - 77, 15);
+                g.lineTo(w - 59, h - 56);
+                g.closePath();
+                g.fill();
+
+                // body
+                g.fillStyle = body;
+                roundRect(g, 8, h - 54, w - 16, 42, 12);
+                g.fill();
+                g.fillStyle = 'rgba(255,255,255,0.18)';
+                g.fillRect(12, h - 46, w - 24, 5);
+                g.fillStyle = '#f6e6a8';
+                roundRect(g, 10, h - 44, 12, 9, 3);
+                g.fill();
+                g.fillStyle = '#d1483a';
+                roundRect(g, w - 22, h - 44, 12, 9, 3);
+                g.fill();
+            };
+        }
+
+        function drawParkingSign(g, w, h) {
+            g.fillStyle = '#8d8f92';
+            g.fillRect(w / 2 - 5, h - 70, 10, 70);
+            g.fillStyle = '#1c4e9c';
+            roundRect(g, 8, 6, w - 16, h - 74, 8);
+            g.fill();
+            g.strokeStyle = '#ffffff';
+            g.lineWidth = 4;
+            roundRect(g, 14, 12, w - 28, h - 86, 5);
+            g.stroke();
+            g.fillStyle = '#ffffff';
+            g.textAlign = 'center';
+            g.font = 'bold 58px Arial';
+            g.fillText('P', w / 2, h - 92);
+        }
+
+        function drawSign(text, arrow, top) {
+            return function (g, w, h) {
+                g.fillStyle = '#8d8f92';
+                g.fillRect(w / 2 - 5, h - 62, 10, 62);
+                g.fillStyle = '#1e7a3c';
+                roundRect(g, 4, 4, w - 8, h - 60, 10);
+                g.fill();
+                g.strokeStyle = '#ffffff';
+                g.lineWidth = 4;
+                roundRect(g, 10, 10, w - 20, h - 72, 7);
+                g.stroke();
+                g.fillStyle = '#ffffff';
+                g.textAlign = 'center';
+                g.font = 'bold 26px Arial';
+                g.fillText(top, w / 2, 42);
+                g.font = 'bold 34px Arial';
+                g.fillText(arrow + ' ' + text, w / 2, h - 78);
+            };
+        }
+
+        function drawGantry(g, w, h) {
+            g.fillStyle = '#3c4a57';
+            g.fillRect(10, 40, 26, h - 40);
+            g.fillRect(w - 36, 40, 26, h - 40);
+            g.fillStyle = '#e8eef2';
+            roundRect(g, 0, 6, w, 46, 8);
+            g.fill();
+            g.fillStyle = '#22313f';
+            g.textAlign = 'center';
+            g.font = 'bold 30px Arial';
+            g.fillText('START  ·  META', w / 2, 39);
+            // checkered trim
+            for (let i = 0; i < w / 16; i++) {
+                g.fillStyle = i % 2 ? '#22313f' : '#ffffff';
+                g.fillRect(i * 16, 52, 16, 9);
+            }
+        }
+
+        // ------------------------------------------------------------------
+        // The cyclists. Drawn in a 100 x 170 design box, feet at the bottom.
+        // ------------------------------------------------------------------
+        function drawCyclist(g, o) {
+            const bike = o.bike, jersey = o.jersey, helmet = o.helmet;
+            const skin = o.skin || '#f5c9a6';
+            const shorts = o.shorts || '#2c3e50';
+            const ph = o.phase || 0;
+            const legL = Math.sin(ph);
+            const legR = -legL;
+
+            // shadow
+            g.fillStyle = 'rgba(0,0,0,0.22)';
+            g.beginPath();
+            g.ellipse(50, 166, 27, 5, 0, 0, Math.PI * 2);
+            g.fill();
+
+            if (o.view === 'front') {
+                drawCyclistFront(g, o, bike, jersey, helmet, skin, shorts, legL, legR);
+            } else {
+                drawCyclistRear(g, o, bike, jersey, helmet, skin, shorts, legL, legR);
+            }
+        }
+
+        function wheel(g, cx, cy, rx, ry) {
+            g.fillStyle = '#22252a';
+            g.beginPath();
+            g.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+            g.fill();
+            g.strokeStyle = '#c9ced4';
+            g.lineWidth = 2;
+            g.beginPath();
+            g.ellipse(cx, cy, rx * 0.45, ry * 0.72, 0, 0, Math.PI * 2);
+            g.stroke();
+        }
+
+        function limb(g, x1, y1, x2, y2, width, color) {
+            g.strokeStyle = color;
+            g.lineWidth = width;
+            g.lineCap = 'round';
+            g.beginPath();
+            g.moveTo(x1, y1);
+            g.lineTo(x2, y2);
+            g.stroke();
+        }
+
+        function drawCyclistRear(g, o, bike, jersey, helmet, skin, shorts, legL, legR) {
+            wheel(g, 50, 140, 7, 30);
+
+            // No handlebar from back here: the rider's body and arms hide it
+            // completely, so drawing one just puts a bar across their back.
+
+            // frame, mudguard and saddle
+            limb(g, 50, 140, 50, 102, 7, bike);
+            limb(g, 50, 140, 42, 108, 5, bike);
+            limb(g, 50, 140, 58, 108, 5, bike);
+            g.strokeStyle = bike;
+            g.lineWidth = 5;
+            g.beginPath();
+            g.arc(50, 140, 22, Math.PI * 1.15, Math.PI * 1.85);
+            g.stroke();
+            g.fillStyle = '#2b2f36';
+            roundRect(g, 40, 96, 20, 8, 4);
+            g.fill();
+
+            // legs (thigh in shorts, shin bare, dark shoe on the pedal)
+            const pedalLy = 132 + legL * 10, pedalRy = 132 + legR * 10;
+            limb(g, 44, 100, 34, 114 + legL * 4, 11, shorts);
+            limb(g, 34, 114 + legL * 4, 39, pedalLy, 8, skin);
+            limb(g, 56, 100, 66, 114 + legR * 4, 11, shorts);
+            limb(g, 66, 114 + legR * 4, 61, pedalRy, 8, skin);
+            g.fillStyle = '#2b2f36';
+            g.fillRect(33, pedalLy - 3, 12, 7);
+            g.fillRect(55, pedalRy - 3, 12, 7);
+
+            // torso seen from behind, leaning forward a little
+            g.fillStyle = jersey;
+            g.beginPath();
+            g.moveTo(39, 100);
+            g.lineTo(61, 100);
+            g.lineTo(68, 62);
+            g.lineTo(32, 62);
+            g.closePath();
+            g.fill();
+            g.fillStyle = 'rgba(255,255,255,0.35)';
+            g.fillRect(46, 62, 8, 38);
+
+            // arms angling down and away towards the bars we cannot see
+            limb(g, 37, 66, 28, 88, 9, jersey);
+            limb(g, 63, 66, 72, 88, 9, jersey);
+            limb(g, 29, 84, 27, 95, 7, skin);
+            limb(g, 71, 84, 73, 95, 7, skin);
+
+            // neck + helmet
+            g.fillStyle = skin;
+            g.fillRect(44, 52, 12, 12);
+            g.fillStyle = helmet;
+            g.beginPath();
+            g.ellipse(50, 44, 19, 17, 0, Math.PI, Math.PI * 2);
+            g.fill();
+            g.fillRect(31, 44, 38, 8);
+            g.fillStyle = 'rgba(0,0,0,0.25)';
+            g.fillRect(41, 30, 4, 18);
+            g.fillRect(55, 30, 4, 18);
+            g.fillStyle = 'rgba(255,255,255,0.5)';
+            g.fillRect(33, 47, 34, 3);
+        }
+
+        function drawCyclistFront(g, o, bike, jersey, helmet, skin, shorts, legL, legR) {
+            wheel(g, 50, 140, 8, 30);
+            limb(g, 45, 112, 47, 138, 5, bike);
+            limb(g, 55, 112, 53, 138, 5, bike);
+
+            // knees poking out sideways
+            g.fillStyle = shorts;
+            roundRect(g, 28, 104 + legL * 6, 20, 26, 9);
+            g.fill();
+            roundRect(g, 52, 104 + legR * 6, 20, 26, 9);
+            g.fill();
+            g.fillStyle = skin;
+            roundRect(g, 31, 126 + legL * 6, 13, 18, 6);
+            g.fill();
+            roundRect(g, 56, 126 + legR * 6, 13, 18, 6);
+            g.fill();
+
+            // chest
+            g.fillStyle = jersey;
+            g.beginPath();
+            g.moveTo(36, 112);
+            g.lineTo(64, 112);
+            g.lineTo(70, 64);
+            g.lineTo(30, 64);
+            g.closePath();
+            g.fill();
+            g.fillStyle = 'rgba(0,0,0,0.15)';
+            g.fillRect(46, 64, 8, 48);
+
+            // arms to a wide handlebar
+            limb(g, 34, 68, 18, 92, 9, jersey);
+            limb(g, 66, 68, 82, 92, 9, jersey);
+            g.fillStyle = '#2b2f36';
+            roundRect(g, 12, 89, 76, 7, 3);
+            g.fill();
+            g.fillStyle = skin;
+            g.fillRect(12, 86, 11, 12);
+            g.fillRect(77, 86, 11, 12);
+
+            // face under the helmet
+            g.fillStyle = skin;
+            g.beginPath();
+            g.ellipse(50, 52, 14, 14, 0, 0, Math.PI * 2);
+            g.fill();
+            g.fillStyle = '#2b2f36';
+            g.beginPath();
+            g.arc(45, 50, 2.2, 0, Math.PI * 2);
+            g.fill();
+            g.beginPath();
+            g.arc(55, 50, 2.2, 0, Math.PI * 2);
+            g.fill();
+            g.strokeStyle = '#b5654a';
+            g.lineWidth = 2;
+            g.beginPath();
+            g.arc(50, 55, 5, 0.15 * Math.PI, 0.85 * Math.PI);
+            g.stroke();
+            g.fillStyle = helmet;
+            g.beginPath();
+            g.ellipse(50, 42, 19, 16, 0, Math.PI, Math.PI * 2);
+            g.fill();
+            g.fillRect(31, 42, 38, 7);
+            g.fillStyle = 'rgba(255,255,255,0.45)';
+            g.fillRect(33, 44, 34, 3);
+            // front light
+            g.fillStyle = '#ffe680';
+            g.beginPath();
+            g.arc(50, 100, 5, 0, Math.PI * 2);
+            g.fill();
+        }
+
+        // ------------------------------------------------------------------
+        // Sprite instances
+        // ------------------------------------------------------------------
+        const SPR = {
+            pine: spr(makeSprite(120, 220, drawPine), 1900),
+            oak: spr(makeSprite(150, 170, drawOak), 2400),
+            birch: spr(makeSprite(140, 180, drawBirch), 2100),
+            bush: spr(makeSprite(110, 70, drawBush), 900),
+            reeds: spr(makeSprite(90, 100, drawReeds), 700),
+            bench: spr(makeSprite(130, 80, drawBench), 1000),
+            lamp: spr(makeSprite(60, 220, drawLamp), 420),
+            rock: spr(makeSprite(90, 60, drawRock), 700),
+            boat: spr(makeSprite(180, 110, drawBoat), 2000),
+            cars: [
+                ['#c0392b', '#a5322a'], ['#2b6cb0', '#245c96'],
+                ['#dfe3e6', '#c3c8cc'], ['#3f7d4f', '#356a44']
+            ].map(c => spr(makeSprite(380, 168, g => {
+                g.scale(2, 2);
+                drawCar(c[0], c[1])(g, 190, 84);
+            }), 3500)),
+            parking: spr(makeSprite(120, 190, drawParkingSign), 800),
+            signBridge: spr(makeSprite(150, 190, drawSign('MOST', '⬅', 'przez jezioro')), 1050),
+            signForest: spr(makeSprite(150, 190, drawSign('LAS', '➡', 'prosto')), 1050),
+            gantry: spr(makeSprite(460, 260, drawGantry), 4200)
+        };
+
+        const CYCLIST_W = 820;           // world width of a cyclist sprite box
+
+        const TRAFFIC_LOOKS = [
+            { bike: '#2c3e50', jersey: '#e74c3c', helmet: '#f1c40f' },
+            { bike: '#7f8c8d', jersey: '#27ae60', helmet: '#ecf0f1' },
+            { bike: '#c0392b', jersey: '#f39c12', helmet: '#2980b9' },
+            { bike: '#16a085', jersey: '#8e44ad', helmet: '#ecf0f1' },
+            { bike: '#34495e', jersey: '#ecf0f1', helmet: '#e67e22' },
+            { bike: '#d35400', jersey: '#2980b9', helmet: '#c0392b' }
+        ];
+
+        // Two pedal phases per look, so traffic legs move as they ride.
+        const TRAFFIC_SPRITES = TRAFFIC_LOOKS.map(look => {
+            const make = (view, phase) => spr(makeSprite(200, 340, g => {
+                g.scale(2, 2);
+                drawCyclist(g, {
+                    bike: look.bike, jersey: look.jersey, helmet: look.helmet,
+                    view: view, phase: phase
+                });
+            }), CYCLIST_W);
+            return {
+                rear: [make('rear', 0.6), make('rear', 3.7)],
+                front: [make('front', 0.6), make('front', 3.7)]
+            };
+        });
+
+        const PLAYER_LOOK = {
+            bike: '#1e9ee0',             // woom blue
+            jersey: '#f4d03f',
+            helmet: '#e2231a',           // red helmet
+            shorts: '#2c3e50'
+        };
+
+        // ------------------------------------------------------------------
+        // Road constants
+        // ------------------------------------------------------------------
+        const SEG_LEN = 200;
+        const RUMBLE_LENGTH = 3;
+        const ROAD_WIDTH = 1500;         // half width of the bike path
+        const DRAW_DISTANCE = 150;       // segments
+        const FIELD_OF_VIEW = 100;
+        const CAMERA_HEIGHT = 1000;
+        const FOG_DENSITY = 4.5;
+        const FOG_COLOR = '#cfe4f2';
+        const RAIL_HEIGHT = 700;
+        const cameraDepth = 1 / Math.tan((FIELD_OF_VIEW / 2) * Math.PI / 180);
+        const playerZ = CAMERA_HEIGHT * cameraDepth;
+        const GHOST_LEN = 70;            // how far the road not taken is drawn
+
+        const TERRAIN = {
+            grass: ['#63b34e', '#5aa746'],
+            park: ['#7cc257', '#72b84e'],
+            forest: ['#3c8a3f', '#357c39'],
+            water: ['#3d9bd4', '#3592cc']
+        };
+
+        const ROAD_COLORS = {
+            light: { road: '#71717a', rumble: '#d64545', lane: '#ffffff' },
+            dark: { road: '#68686f', rumble: '#f2f2f2', lane: null }
+        };
+
+        const BRIDGE_COLORS = {
+            light: { road: '#a3937a', rumble: '#6f6152', lane: null },
+            dark: { road: '#96866d', rumble: '#6f6152', lane: null }
+        };
+
+        const HILL = { LOW: 600, MED: 1400 };
+
+        // ------------------------------------------------------------------
+        // Track building
+        // ------------------------------------------------------------------
+        function lastY(t) {
+            return t.segments.length === 0 ? 0 : t.segments[t.segments.length - 1].p2.world.y;
+        }
+
+        function addSegment(t, curve, y, opts) {
+            const n = t.segments.length;
+            const seg = {
+                index: n,
+                p1: { world: { y: lastY(t), z: n * SEG_LEN }, camera: {}, screen: {} },
+                p2: { world: { y: y, z: (n + 1) * SEG_LEN }, camera: {}, screen: {} },
+                curve: curve,
+                sprites: [],
+                cars: [],
+                left: opts.L,
+                right: opts.R,
+                bridge: opts.kind === 'bridge',
+                shade: Math.floor(n / RUMBLE_LENGTH) % 2 ? 'dark' : 'light',
+                clip: 0,
+                fog: 1,
+                looped: false
+            };
+            t.segments.push(seg);
+            decorate(t, seg, opts);
+        }
+
+        function addRoad(t, enter, hold, leave, curve, y, opts) {
+            const startY = lastY(t);
+            const endY = startY + y;
+            const total = enter + hold + leave;
+            for (let i = 0; i < enter; i++)
+                addSegment(t, easeIn(0, curve, i / enter), easeInOut(startY, endY, i / total), opts);
+            for (let i = 0; i < hold; i++)
+                addSegment(t, curve, easeInOut(startY, endY, (enter + i) / total), opts);
+            for (let i = 0; i < leave; i++)
+                addSegment(t, easeInOut(curve, 0, i / leave), easeInOut(startY, endY, (enter + hold + i) / total), opts);
+        }
+
+        // Scenery. Uses the track's own seeded generator so the shared part of
+        // both variants ends up identical.
+        function decorate(t, seg, opts) {
+            if (seg.bridge) return;
+            const rand = t.rand;
+            sideScenery(seg, opts.L, -1, rand);
+            sideScenery(seg, opts.R, 1, rand);
+        }
+
+        function sideScenery(seg, terrain, dir, rand) {
+            const put = (sprite, offset) => seg.sprites.push({ sprite: sprite, offset: dir * offset });
+            if (terrain === 'forest') {
+                if (rand() < 0.55) {
+                    const r = rand();
+                    put(r < 0.55 ? SPR.pine : (r < 0.85 ? SPR.oak : SPR.birch), 1.5 + rand() * 3.4);
+                }
+                if (rand() < 0.10) put(SPR.bush, 1.25 + rand() * 0.5);
+            } else if (terrain === 'grass') {
+                if (rand() < 0.10) put(rand() < 0.5 ? SPR.oak : SPR.pine, 1.7 + rand() * 2.6);
+                if (rand() < 0.05) put(SPR.bush, 1.25 + rand() * 0.4);
+                if (rand() < 0.012) put(SPR.rock, 1.3 + rand() * 0.6);
+            } else if (terrain === 'park') {
+                if (rand() < 0.04) put(SPR.oak, 2.6 + rand() * 1.4);
+                if (rand() < 0.03) put(SPR.bench, 1.3);
+                if (rand() < 0.025) put(SPR.lamp, 1.2);
+            } else if (terrain === 'water') {
+                if (rand() < 0.14) put(SPR.reeds, 1.15 + rand() * 0.25);
+                if (rand() < 0.008) put(SPR.boat, 3.5 + rand() * 4);
+            }
+        }
+
+        function buildTrack(name) {
+            const t = { name: name, segments: [], rand: rng(20260803) };
+
+            // The whole lap runs anti-clockwise around the lake, so the water
+            // is always on the rider's left - same as on the little map.
+
+            // --- shared: out of the car park and north up the eastern shore ---
+            addRoad(t, 20, 60, 20, 0, 0, { L: 'water', R: 'park' });
+            addRoad(t, 25, 50, 25, 1.4, HILL.LOW, { L: 'water', R: 'grass' });
+            addRoad(t, 25, 50, 25, -1.8, -HILL.LOW, { L: 'water', R: 'forest' });
+            addRoad(t, 20, 40, 20, -0.8, 0, { L: 'water', R: 'forest' });
+
+            t.fork = t.segments.length;
+
+            // --- the choice: left onto the bridge, or straight on into the woods ---
+            if (name === 'bridge') {
+                // short ease-in: the two roads have to pull apart quickly or the
+                // junction just looks like one road with a kink in it
+                addRoad(t, 8, 42, 20, -4.6, 0, { L: 'water', R: 'grass' });
+                addRoad(t, 0, 110, 0, 0, 0, { L: 'water', R: 'water', kind: 'bridge' });
+                addRoad(t, 15, 10, 15, -2.4, 0, { L: 'water', R: 'grass' });
+            } else {
+                addRoad(t, 8, 67, 25, 2.4, HILL.LOW, { L: 'water', R: 'forest' });
+                addRoad(t, 30, 60, 30, -2.2, HILL.MED, { L: 'water', R: 'forest' });
+                addRoad(t, 30, 70, 30, -2.8, -HILL.LOW, { L: 'water', R: 'forest' });
+                addRoad(t, 30, 60, 30, -2.4, -HILL.MED, { L: 'water', R: 'forest' });
+                addRoad(t, 30, 70, 30, 1.8, HILL.LOW, { L: 'forest', R: 'forest' });
+                addRoad(t, 30, 60, 30, -2.0, -HILL.LOW, { L: 'water', R: 'forest' });
+                addRoad(t, 25, 50, 25, -1.4, 0, { L: 'water', R: 'forest' });
+                addRoad(t, 20, 40, 20, 0.8, 0, { L: 'water', R: 'grass' });
+            }
+
+            t.branchLen = t.segments.length - t.fork;
+
+            // --- shared run home: south, round the bottom and back to the car park ---
+            addRoad(t, 25, 50, 25, -1.6, HILL.LOW, { L: 'water', R: 'grass' });
+            addRoad(t, 30, 60, 30, -2.6, -HILL.LOW, { L: 'water', R: 'forest' });
+            addRoad(t, 30, 70, 30, -2.4, HILL.LOW, { L: 'water', R: 'grass' });
+            addRoad(t, 30, 60, 30, -1.8, -HILL.LOW, { L: 'water', R: 'park' });
+            addRoad(t, 25, 45, 25, 0.6, 0, { L: 'water', R: 'park' });
+            // level back out to y = 0 so the lap wraps without a step
+            addRoad(t, 15, 25, 15, 0, -lastY(t), { L: 'water', R: 'park' });
+
+            t.length = t.segments.length * SEG_LEN;
+
+            // start/finish gantry and the fork signs
+            t.segments[6].sprites.push({ sprite: SPR.gantry, offset: 0 });
+            t.segments[14].sprites.push({ sprite: SPR.parking, offset: 1.35 });
+
+            // Ten cars in two rows, all in the car park by the start line.
+            for (let i = 0; i < 10; i++) {
+                t.segments[16 + i * 11].sprites.push({
+                    sprite: SPR.cars[i % SPR.cars.length],
+                    offset: i % 2 ? 2.0 : 3.25
+                });
+            }
+            t.segments[t.fork - 46].sprites.push({ sprite: SPR.signBridge, offset: -1.45 });
+            t.segments[t.fork - 46].sprites.push({ sprite: SPR.signForest, offset: 1.45 });
+            return t;
+        }
+
+        const TRACKS = { bridge: buildTrack('bridge'), forest: buildTrack('forest') };
+        const FORK_INDEX = TRACKS.bridge.fork;
+        const FORK_Z = FORK_INDEX * SEG_LEN;
+
+        // ------------------------------------------------------------------
+        // Driving model - deliberately slow and forgiving
+        // ------------------------------------------------------------------
+        const MAX_SPEED = 3400;          // world units per second
+        const ACCEL = MAX_SPEED / 3.2;
+        const BRAKE = -MAX_SPEED / 1.6;
+        const DECEL = -MAX_SPEED / 7;
+        const OFF_ROAD_DECEL = -MAX_SPEED / 2.2;
+        const OFF_ROAD_LIMIT = MAX_SPEED / 3.5;
+        const CENTRIFUGAL = 0.22;
+        const STEER_RATE = 2.1;          // road widths per second at full lean and speed
+        const LEAN_IN = 2.6;             // how fast the bike tips into a turn
+        const LEAN_OUT = 3.8;            // and how fast it comes back upright
+        const LEAN_ANGLE = 0.26;         // radians of body tilt at full lean
+        const PLAYER_SCALE = 0.66;       // rider size vs. their true size at camera distance
+        const KMH_AT_MAX = 22;
+        const HIT_W = 0.30;              // half of two bikes side by side
+        const HIT_Z = 1000;
+        const RESPAWN_TIME = 2.0;
+        const RESPAWN_X = 0.55;
+
+        let track = TRACKS.bridge;
+        let route = 'bridge';
+        let routeLocked = false;
+
+        let state = 'ready';             // 'ready' | 'playing' | 'crash'
+        let position = 0;
+        let playerX = RESPAWN_X;
+        let speed = 0;
+        let pedalPhase = 0;
+        let lean = 0;
+        let crashTimer = 0;
+        let invuln = 0;
+        let shake = 0;
+        let bgOffset = 0;
+        let overtakes = 0;
+        let bumps = 0;
+        let lap = 1;
+        let lapTime = 0;
+        let bestLap = 0;
+        let toasts = [];
+        let cars = [];
+
+        function trackLength() { return track.length; }
+
+        function findSegment(z) {
+            const segs = track.segments;
+            return segs[Math.floor(z / SEG_LEN) % segs.length];
+        }
+
+        // signed distance from b to a, taking the loop into account
+        function relDist(a, b) {
+            const len = trackLength();
+            let d = a - b;
+            if (d > len / 2) d -= len;
+            if (d < -len / 2) d += len;
+            return d;
+        }
+
+        function wrapZ(z) {
+            const len = trackLength();
+            return ((z % len) + len) % len;
+        }
+
+        function toast(text, color) {
+            toasts.push({ text: text, color: color || '#22313f', life: 1.6, t: 1.6 });
+        }
+
+        // ------------------------------------------------------------------
+        // Traffic
+        // ------------------------------------------------------------------
+        function resetCars() {
+            cars = [];
+            const rand = rng(987654321);
+            const count = 46;
+            for (let i = 0; i < count; i++) {
+                const oncoming = i % 5 >= 3;             // roughly 40% head-on
+                const look = Math.floor(rand() * TRAFFIC_SPRITES.length);
+                // Both directions keep well over to their own side, so there is
+                // always a gap up the middle to squeeze through.
+                const base = (0.42 + rand() * 0.44) * (oncoming ? -1 : 1);
+                cars.push({
+                    z: wrapZ((i / count) * trackLength() + rand() * 4000 + 30000),
+                    dir: oncoming ? -1 : 1,
+                    base: base,
+                    offset: base,
+                    wobble: 0.03 + rand() * 0.05,
+                    phase: rand() * Math.PI * 2,
+                    speed: MAX_SPEED * (oncoming ? 0.45 + rand() * 0.3 : 0.24 + rand() * 0.34),
+                    look: look,
+                    step: rand() * 10,
+                    ahead: true
+                });
+            }
+            // keep the start line clear so nobody is hit before they pedal off
+            for (const car of cars) {
+                const d = relDist(car.z, position);
+                if (d > -6000 && d < 14000) car.z = wrapZ(car.z + 18000);
+            }
+            for (const car of cars) car.ahead = relDist(car.z, position) > 0;
+        }
+
+        function updateCars(dt, scoring) {
+            for (const car of cars) {
+                const wasAhead = car.ahead;
+                car.z = wrapZ(car.z + car.dir * car.speed * dt);
+                car.phase += dt * 1.4;
+                car.step += dt * car.speed / 260;
+                car.offset = clamp(car.base + Math.sin(car.phase) * car.wobble, -0.86, 0.86);
+                const d = relDist(car.z, position);
+                car.ahead = d > 0;
+                // Only a real pass counts - the ahead/behind flag also flips on
+                // the far side of the lake, which is not an overtake.
+                if (scoring && car.dir > 0 && wasAhead && !car.ahead && Math.abs(d) < 4000) {
+                    overtakes++;
+                    toast('Wyprzedzony! +1', '#1e7a3c');
+                }
+            }
+        }
+
+        // Cars sitting past the fork keep the same world z on both variants, so
+        // switching routes only has to rescue the ones that fall off the end of
+        // a shorter lap.
+        function rehomeCars() {
+            const len = trackLength();
+            for (const car of cars) {
+                if (car.z >= len) {
+                    car.z = wrapZ(position - (200 + Math.random() * 400) * SEG_LEN);
+                    car.ahead = relDist(car.z, position) > 0;
+                }
+            }
+        }
+
+        function clearCarsAround() {
+            for (const car of cars) {
+                if (Math.abs(relDist(car.z, position)) < 6000) {
+                    car.z = wrapZ(position - (150 + Math.random() * 300) * SEG_LEN);
+                    car.ahead = relDist(car.z, position) > 0;
+                }
+            }
+        }
+
+        // ------------------------------------------------------------------
+        // Input
+        // ------------------------------------------------------------------
+        const keys = {};
+        let padStartLatch = false;
+
+        const KEY_MAP = {
+            ArrowLeft: 'left', ArrowRight: 'right', ArrowUp: 'up', ArrowDown: 'down',
+            a: 'left', d: 'right', w: 'up', s: 'down',
+            A: 'left', D: 'right', W: 'up', S: 'down'
+        };
+
+        document.addEventListener('keydown', e => {
+            const k = KEY_MAP[e.key];
+            if (k || e.code === 'Space') e.preventDefault();
+            if (k) keys[k] = true;
+            if (state === 'ready') startGame();
+        });
+
+        document.addEventListener('keyup', e => {
+            const k = KEY_MAP[e.key];
+            if (k) keys[k] = false;
+        });
+
+        canvas.addEventListener('click', () => { if (state === 'ready') startGame(); });
+        canvas.addEventListener('touchstart', e => {
+            if (state === 'ready') { e.preventDefault(); startGame(); }
+        });
+
+        function readGamepad() {
+            const out = { steer: 0, accel: false, brake: false, any: false };
+            const pads = navigator.getGamepads ? navigator.getGamepads() : [];
+            let pad = null;
+            for (let i = 0; i < pads.length; i++) if (pads[i]) { pad = pads[i]; break; }
+            if (!pad) return out;
+
+            const stick = pad.axes[0] || 0;
+            if (Math.abs(stick) > 0.15) out.steer = stick;
+            const btn = i => pad.buttons[i] && pad.buttons[i].pressed;
+            if (btn(14)) out.steer = -1;
+            if (btn(15)) out.steer = 1;
+            if (btn(0) || btn(7) || btn(12) || (pad.axes[1] || 0) < -0.5) out.accel = true;
+            if (btn(1) || btn(2) || btn(6) || btn(13) || (pad.axes[1] || 0) > 0.5) out.brake = true;
+            for (let i = 0; i < pad.buttons.length; i++) if (btn(i)) out.any = true;
+            return out;
+        }
+
+        function startGame() {
+            state = 'playing';
+            instructions.style.display = 'none';
+            position = 0;
+            playerX = RESPAWN_X;
+            speed = 0;
+            lean = 0;
+            overtakes = 0;
+            bumps = 0;
+            lap = 1;
+            lapTime = 0;
+            bestLap = 0;
+            routeLocked = false;
+            toasts = [];
+            resetCars();
+        }
+
+        // ------------------------------------------------------------------
+        // Update
+        // ------------------------------------------------------------------
+        function update(dt) {
+            const pad = readGamepad();
+            if (state === 'ready') {
+                if (pad.any && !padStartLatch) { startGame(); }
+                padStartLatch = pad.any;
+                return;
+            }
+            padStartLatch = pad.any;
+
+            const crashing = state === 'crash';
+            const camSeg = findSegment(position);
+            const speedPercent = speed / MAX_SPEED;
+
+            let steer = 0;
+            if (!crashing) {
+                if (keys.left) steer -= 1;
+                if (keys.right) steer += 1;
+                if (pad.steer) steer = clamp(steer + pad.steer, -1, 1);
+            }
+
+            // A bike does not slide sideways on command - it leans. The lean
+            // takes a moment to build and a moment to come back up, so the bike
+            // keeps carving after the key goes up, and holding the key keeps
+            // pulling you further across the road.
+            const leanRate = steer !== 0 ? LEAN_IN : LEAN_OUT;
+            lean = clamp(lean + clamp(steer - lean, -leanRate * dt, leanRate * dt), -1, 1);
+
+            // Turn rate follows the lean and how fast you are going, with a
+            // floor so a rider who has stopped can still get going again.
+            const grip = Math.max(0.25, speedPercent);
+            playerX += lean * STEER_RATE * grip * dt;
+            playerX -= dt * STEER_RATE * speedPercent * speedPercent * camSeg.curve * CENTRIFUGAL;
+
+            // leaning hard scrubs off a little speed, like a real corner
+            if (!crashing) speed -= Math.abs(lean) * speedPercent * MAX_SPEED * 0.06 * dt;
+
+            if (!crashing) {
+                if (keys.up || pad.accel) speed += ACCEL * dt;
+                else if (keys.down || pad.brake) speed += BRAKE * dt;
+                else speed += DECEL * dt;
+            }
+
+            const onBridge = camSeg.bridge;
+            if (onBridge) {
+                // the railing keeps you on the deck
+                playerX = clamp(playerX, -0.94, 0.94);
+            } else if (Math.abs(playerX) > 1) {
+                // Grass and gravel drag you down to a walking pace, but never to
+                // a standstill - you always keep enough speed to steer back on.
+                if (speed > OFF_ROAD_LIMIT) speed = Math.max(OFF_ROAD_LIMIT, speed + OFF_ROAD_DECEL * dt);
+                shake = Math.min(1, shake + dt * 4);
+            }
+            if (Math.abs(playerX) <= 1 || onBridge) shake = Math.max(0, shake - dt * 4);
+
+            playerX = clamp(playerX, -1.7, 1.7);
+            speed = clamp(speed, 0, MAX_SPEED);
+
+            pedalPhase += dt * (1.5 + 9 * (speed / MAX_SPEED));
+            if (crashing) pedalPhase = 0;
+
+            // move along the track, count laps
+            const before = position;
+            position += speed * dt;
+            if (position >= trackLength()) {
+                position -= trackLength();
+                lap++;
+                if (bestLap === 0 || lapTime < bestLap) bestLap = lapTime;
+                toast('Okrążenie ' + lap + '!', '#c0392b');
+                lapTime = 0;
+                routeLocked = false;
+            } else {
+                lapTime += dt;
+            }
+
+            // route choice: free until the camera reaches the fork
+            if (!routeLocked) {
+                if (position >= FORK_Z && before < FORK_Z) {
+                    routeLocked = true;
+                    toast(route === 'bridge' ? '🌉 Jedziemy przez most!' : '🌲 Jedziemy przez las!', '#1e5f8a');
+                } else if (position < FORK_Z) {
+                    const want = playerX <= -0.05 ? 'bridge' : (playerX >= 0.05 ? 'forest' : route);
+                    if (want !== route) {
+                        route = want;
+                        track = TRACKS[route];
+                        rehomeCars();
+                    }
+                }
+            }
+
+            updateCars(dt, !crashing);
+
+            if (invuln > 0) invuln -= dt;
+
+            if (crashing) {
+                crashTimer -= dt;
+                if (crashTimer <= 0) {
+                    state = 'playing';
+                    playerX = RESPAWN_X;
+                    speed = 0;
+                    lean = 0;
+                    invuln = 1.2;
+                    clearCarsAround();
+                }
+            } else {
+                checkCollisions();
+            }
+
+            for (let i = toasts.length - 1; i >= 0; i--) {
+                toasts[i].t -= dt;
+                if (toasts[i].t <= 0) toasts.splice(i, 1);
+            }
+
+            bgOffset -= camSeg.curve * (speed * dt / SEG_LEN) * 3;
+        }
+
+        function checkCollisions() {
+            if (invuln > 0) return;
+            const pz = position + playerZ;
+            for (const car of cars) {
+                if (Math.abs(relDist(car.z, pz)) > HIT_Z) continue;
+                if (Math.abs(playerX - car.offset) < HIT_W) { crash(); return; }
+            }
+        }
+
+        function crash() {
+            state = 'crash';
+            crashTimer = RESPAWN_TIME;
+            speed = 0;
+            bumps++;
+            shake = 1;
+        }
+
+        // ------------------------------------------------------------------
+        // Background layers
+        // ------------------------------------------------------------------
+        const HILLS = makeSprite(1000, 150, (g, w, h) => {
+            g.fillStyle = '#8fb98d';
+            g.beginPath();
+            g.moveTo(0, h);
+            for (let x = 0; x <= w; x += 25) {
+                g.lineTo(x, h - 40 - Math.sin(x / 130) * 26 - Math.sin(x / 47) * 12);
+            }
+            g.lineTo(w, h);
+            g.closePath();
+            g.fill();
+        });
+
+        function drawBackground() {
+            const sky = ctx.createLinearGradient(0, 0, 0, GH * 0.62);
+            sky.addColorStop(0, '#4fb3e8');
+            sky.addColorStop(0.7, '#a9d9f2');
+            sky.addColorStop(1, FOG_COLOR);
+            ctx.fillStyle = sky;
+            ctx.fillRect(0, 0, GW, GH);
+
+            drawLayer(HILLS, bgOffset * 0.4, 326);
+        }
+
+        function drawLayer(img, offset, baseY) {
+            const w = img.width;
+            let x = -(((offset % w) + w) % w);
+            const y = baseY - img.height;
+            while (x < GW) {
+                ctx.drawImage(img, x, y);
+                x += w;
+            }
+        }
+
+        // ------------------------------------------------------------------
+        // Road rendering
+        // ------------------------------------------------------------------
+        function project(p, camX, camY, camZ) {
+            p.camera.x = -camX;
+            p.camera.y = p.world.y - camY;
+            p.camera.z = p.world.z - camZ;
+            p.screen.scale = cameraDepth / p.camera.z;
+            p.screen.x = GW / 2 + p.screen.scale * p.camera.x * GW / 2;
+            p.screen.y = GH / 2 - p.screen.scale * p.camera.y * GH / 2;
+            p.screen.w = p.screen.scale * ROAD_WIDTH * GW / 2;
+        }
+
+        function fogFactor(d) {
+            return Math.pow(2, -FOG_DENSITY * d * d);
+        }
+
+        function drawSegment(seg, prevMaxy) {
+            const p1 = seg.p1.screen, p2 = seg.p2.screen;
+            const colors = seg.bridge ? BRIDGE_COLORS[seg.shade] : ROAD_COLORS[seg.shade];
+            const shadeIdx = seg.shade === 'dark' ? 1 : 0;
+            const r1 = p1.w / 5, r2 = p2.w / 5;
+            const l1 = p1.w / 26, l2 = p2.w / 26;
+
+            poly(ctx, 0, p1.y, p1.x - p1.w - r1, p1.y, p2.x - p2.w - r2, p2.y, 0, p2.y,
+                TERRAIN[seg.left][shadeIdx]);
+            poly(ctx, p1.x + p1.w + r1, p1.y, GW, p1.y, GW, p2.y, p2.x + p2.w + r2, p2.y,
+                TERRAIN[seg.right][shadeIdx]);
+
+            poly(ctx, p1.x - p1.w - r1, p1.y, p1.x - p1.w, p1.y, p2.x - p2.w, p2.y, p2.x - p2.w - r2, p2.y, colors.rumble);
+            poly(ctx, p1.x + p1.w, p1.y, p1.x + p1.w + r1, p1.y, p2.x + p2.w + r2, p2.y, p2.x + p2.w, p2.y, colors.rumble);
+            poly(ctx, p1.x - p1.w, p1.y, p1.x + p1.w, p1.y, p2.x + p2.w, p2.y, p2.x - p2.w, p2.y, colors.road);
+
+            if (colors.lane) {
+                poly(ctx, p1.x - l1, p1.y, p1.x + l1, p1.y, p2.x + l2, p2.y, p2.x - l2, p2.y, colors.lane);
+            }
+
+            if (seg.bridge) drawRailings(seg);
+
+            if (seg.fog < 1) {
+                ctx.globalAlpha = 1 - seg.fog;
+                ctx.fillStyle = FOG_COLOR;
+                ctx.fillRect(0, p2.y, GW, prevMaxy - p2.y);
+                ctx.globalAlpha = 1;
+            }
+        }
+
+        function drawRailings(seg) {
+            const p1 = seg.p1.screen, p2 = seg.p2.screen;
+            const top1 = p1.y - p1.scale * RAIL_HEIGHT * GH / 2;
+            const top2 = p2.y - p2.scale * RAIL_HEIGHT * GH / 2;
+            const t1 = Math.max(1, p1.scale * 90 * GH / 2);
+            const t2 = Math.max(0.5, p2.scale * 90 * GH / 2);
+            const e1 = p1.w * 1.12, e2 = p2.w * 1.12;
+            for (const side of [-1, 1]) {
+                const x1 = p1.x + side * e1, x2 = p2.x + side * e2;
+                poly(ctx, x1, top1, x1, top1 + t1, x2, top2 + t2, x2, top2, '#e8e2d4');
+                poly(ctx, x1, top1 + t1 * 3, x1, top1 + t1 * 4, x2, top2 + t2 * 3, x2, top2 + t2 * 4, '#c9c0ad');
+                if (seg.index % 3 === 0) {
+                    ctx.fillStyle = '#b3aa96';
+                    ctx.fillRect(x1 - t1 / 2, top1, Math.max(1, t1), p1.y - top1);
+                }
+            }
+        }
+
+        function renderSprite(sprite, scale, destX, destY, offsetX, clipY, alpha) {
+            const destW = scale * sprite.worldW * GW / 2;
+            const destH = destW * (sprite.img.height / sprite.img.width);
+            const x = destX + destW * (offsetX || -0.5);
+            const y = destY - destH;
+            const clipH = clipY ? Math.max(0, y + destH - clipY) : 0;
+            if (clipH >= destH) return;
+            ctx.globalAlpha = alpha;
+            ctx.drawImage(sprite.img,
+                0, 0, sprite.img.width, sprite.img.height - sprite.img.height * clipH / destH,
+                x, y, destW, destH - clipH);
+            ctx.globalAlpha = 1;
+        }
+
+        function render() {
+            ctx.setTransform(renderScale, 0, 0, renderScale, 0, 0);
+            ctx.clearRect(0, 0, GW, GH);
+
+            const shakeX = shake * (Math.random() - 0.5) * 6;
+            const shakeY = shake * (Math.random() - 0.5) * 4;
+            ctx.save();
+            ctx.translate(shakeX, shakeY);
+
+            drawBackground();
+
+            const segs = track.segments;
+            const base = findSegment(position);
+            const basePercent = (position % SEG_LEN) / SEG_LEN;
+            const playerSeg = findSegment(position + playerZ);
+            const playerPercent = ((position + playerZ) % SEG_LEN) / SEG_LEN;
+            const camY = lerp(playerSeg.p1.world.y, playerSeg.p2.world.y, playerPercent) + CAMERA_HEIGHT;
+
+            let maxy = GH;
+            let x = 0;
+            let dx = -(base.curve * basePercent);
+            let forkX = null, forkDx = 0, forkMaxy = GH, forkN = -1;
+
+            for (let n = 0; n < DRAW_DISTANCE; n++) {
+                const seg = segs[(base.index + n) % segs.length];
+                seg.looped = seg.index < base.index;
+                seg.fog = fogFactor(n / DRAW_DISTANCE);
+                seg.clip = maxy;
+                seg.cars.length = 0;
+
+                if (seg.index === FORK_INDEX && !seg.looped) {
+                    forkX = x; forkDx = dx; forkMaxy = maxy; forkN = n;
+                }
+
+                const camZ = position - (seg.looped ? track.length : 0);
+                project(seg.p1, playerX * ROAD_WIDTH - x, camY, camZ);
+                project(seg.p2, playerX * ROAD_WIDTH - x - dx, camY, camZ);
+                x += dx;
+                dx += seg.curve;
+
+                if (seg.p1.camera.z <= cameraDepth || seg.p2.screen.y >= maxy) continue;
+                drawSegment(seg, maxy);
+                maxy = seg.p2.screen.y;
+            }
+
+            // The road not taken - drawn so the fork really looks like a fork
+            // and so committing to a side never makes the scenery jump.
+            if (!routeLocked && forkX !== null) {
+                const ghost = TRACKS[route === 'bridge' ? 'forest' : 'bridge'].segments;
+                let gx = forkX, gdx = forkDx, gmaxy = forkMaxy;
+                for (let k = 0; k + forkN < DRAW_DISTANCE && k < GHOST_LEN; k++) {
+                    const seg = ghost[FORK_INDEX + k];
+                    if (!seg) break;
+                    seg.fog = fogFactor((forkN + k) / DRAW_DISTANCE);
+                    project(seg.p1, playerX * ROAD_WIDTH - gx, camY, position);
+                    project(seg.p2, playerX * ROAD_WIDTH - gx - gdx, camY, position);
+                    gx += gdx;
+                    gdx += seg.curve;
+                    if (seg.p1.camera.z <= cameraDepth || seg.p2.screen.y >= gmaxy) continue;
+                    ctx.globalAlpha = Math.min(1, (GHOST_LEN - k) / 22) * seg.fog;
+                    const p1 = seg.p1.screen, p2 = seg.p2.screen;
+                    const c = seg.bridge ? BRIDGE_COLORS[seg.shade] : ROAD_COLORS[seg.shade];
+                    const r1 = p1.w / 5, r2 = p2.w / 5;
+                    poly(ctx, p1.x - p1.w - r1, p1.y, p1.x - p1.w, p1.y, p2.x - p2.w, p2.y, p2.x - p2.w - r2, p2.y, c.rumble);
+                    poly(ctx, p1.x + p1.w, p1.y, p1.x + p1.w + r1, p1.y, p2.x + p2.w + r2, p2.y, p2.x + p2.w, p2.y, c.rumble);
+                    poly(ctx, p1.x - p1.w, p1.y, p1.x + p1.w, p1.y, p2.x + p2.w, p2.y, p2.x - p2.w, p2.y, c.road);
+                    if (seg.bridge) drawRailings(seg);
+                    ctx.globalAlpha = 1;
+                    gmaxy = seg.p2.screen.y;
+                }
+            }
+
+            // bucket the traffic into the segments we just projected
+            for (const car of cars) {
+                const rel = relDist(car.z, position);
+                if (rel > 0 && rel < (DRAW_DISTANCE - 1) * SEG_LEN) findSegment(car.z).cars.push(car);
+            }
+
+            // scenery and traffic, far to near
+            for (let n = DRAW_DISTANCE - 1; n >= 0; n--) {
+                const seg = segs[(base.index + n) % segs.length];
+                const p1 = seg.p1.screen, p2 = seg.p2.screen;
+                if (!p1.scale || seg.p1.camera.z <= cameraDepth) continue;
+                const alpha = Math.max(0.1, seg.fog);
+
+                for (const car of seg.cars) {
+                    const percent = (car.z % SEG_LEN) / SEG_LEN;
+                    const scale = lerp(p1.scale, p2.scale, percent);
+                    const cx = lerp(p1.x, p2.x, percent) + scale * car.offset * ROAD_WIDTH * GW / 2;
+                    const cy = lerp(p1.y, p2.y, percent);
+                    const set = TRAFFIC_SPRITES[car.look][car.dir > 0 ? 'rear' : 'front'];
+                    renderSprite(set[Math.floor(car.step) % 2], scale, cx, cy, -0.5, seg.clip, alpha);
+                }
+
+                for (const item of seg.sprites) {
+                    const sx = p1.x + p1.scale * item.offset * ROAD_WIDTH * GW / 2;
+                    renderSprite(item.sprite, p1.scale, sx, p1.y,
+                        item.offset === 0 ? -0.5 : (item.offset < 0 ? -1 : 0), seg.clip, alpha);
+                }
+            }
+
+            drawPlayerBike();
+            ctx.restore();
+            drawHud();
+        }
+
+        function drawPlayerBike() {
+            // Size the rider off the projection, so they sit in the world at the
+            // same scale as everyone else - PLAYER_SCALE just pulls them back a
+            // little so they do not block the road ahead.
+            const trueH = (cameraDepth / playerZ) * (CYCLIST_W * 170 / 100) * GH / 2;
+            const h = trueH * PLAYER_SCALE;
+            const w = h * 100 / 170;
+            const bob = Math.sin(pedalPhase * 2) * 2.5 * (0.4 + speed / MAX_SPEED);
+            const cx = GW / 2 + lean * 20;
+            const by = GH - 18 + bob;
+
+            ctx.save();
+            ctx.translate(cx, by);
+            if (state === 'crash') {
+                const t = Math.min(1, (RESPAWN_TIME - crashTimer) / 0.45);
+                ctx.rotate(t * 1.15);
+                ctx.translate(t * 26, t * 10);
+            }
+            // tips over about the contact patch, into the turn
+            ctx.rotate(lean * LEAN_ANGLE);
+            ctx.scale(w / 100, h / 170);
+            ctx.translate(-50, -170);
+            drawCyclist(ctx, {
+                bike: PLAYER_LOOK.bike,
+                jersey: PLAYER_LOOK.jersey,
+                helmet: PLAYER_LOOK.helmet,
+                shorts: PLAYER_LOOK.shorts,
+                view: 'rear',
+                phase: pedalPhase
+            });
+            ctx.restore();
+        }
+
+        // ------------------------------------------------------------------
+        // Map of the lake - a stylised Jezioro Długie: long, narrow, pinched in
+        // the middle, with the bridge across the waist.
+        // ------------------------------------------------------------------
+        const LAKE = [
+            [110, 34], [132, 46], [144, 74], [140, 104], [128, 130], [122, 152],
+            [130, 178], [142, 204], [146, 232], [134, 258], [110, 268], [86, 258],
+            [74, 232], [78, 204], [90, 178], [98, 152], [92, 130], [80, 104],
+            [76, 74], [88, 46]
+        ];
+
+        // Anti-clockwise from the car park in the south-east: up the eastern
+        // shore to the narrows, then either left over the bridge or straight on
+        // around the wooded northern basin.
+        const ROUTE = {
+            common: [[158, 270], [166, 250], [168, 228], [161, 204], [150, 182], [141, 160]],
+            bridge: [[141, 160], [120, 159], [100, 159], [80, 158]],
+            forest: [[141, 160], [146, 138], [157, 112], [163, 80], [158, 48], [140, 24],
+                     [110, 14], [80, 24], [62, 48], [56, 78], [60, 108], [72, 134], [80, 158]],
+            tail: [[80, 158], [74, 176], [62, 196], [52, 222], [56, 252], [74, 278],
+                   [102, 290], [132, 286], [158, 270]]
+        };
+
+        function polyLength(pts) {
+            let total = 0;
+            for (let i = 1; i < pts.length; i++) {
+                total += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]);
+            }
+            return total;
+        }
+
+        function pointOn(pts, t) {
+            const target = polyLength(pts) * clamp(t, 0, 1);
+            let walked = 0;
+            for (let i = 1; i < pts.length; i++) {
+                const d = Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]);
+                if (walked + d >= target) {
+                    const f = d === 0 ? 0 : (target - walked) / d;
+                    return [lerp(pts[i - 1][0], pts[i][0], f), lerp(pts[i - 1][1], pts[i][1], f)];
+                }
+                walked += d;
+            }
+            return pts[pts.length - 1];
+        }
+
+        function mapPosition() {
+            const forkZ = track.fork * SEG_LEN;
+            const branchZ = (track.fork + track.branchLen) * SEG_LEN;
+            if (position < forkZ) return pointOn(ROUTE.common, position / forkZ);
+            if (position < branchZ) return pointOn(ROUTE[track.name], (position - forkZ) / (branchZ - forkZ));
+            return pointOn(ROUTE.tail, (position - branchZ) / (track.length - branchZ));
+        }
+
+        function tracePath(pts, closed) {
+            ctx.beginPath();
+            ctx.moveTo(pts[0][0], pts[0][1]);
+            for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+            if (closed) ctx.closePath();
+        }
+
+        function drawMinimap() {
+            const W = 158, H = 218;
+            const px = GW - W - 16, py = GH - H - 16;
+
+            ctx.save();
+            ctx.fillStyle = 'rgba(255,255,255,0.86)';
+            ctx.strokeStyle = '#22313f';
+            ctx.lineWidth = 3;
+            roundRect(ctx, px, py, W, H, 12);
+            ctx.fill();
+            ctx.stroke();
+
+            ctx.save();
+            roundRect(ctx, px, py, W, H, 12);
+            ctx.clip();
+            ctx.translate(px, py);
+            ctx.scale(W / 220, H / 305);
+            ctx.translate(0, 4);
+
+            // woods around the northern basin - that is the long way round
+            ctx.fillStyle = 'rgba(60,138,63,0.28)';
+            const rand = rng(77);
+            for (let i = 0; i < 36; i++) {
+                const a = rand() * Math.PI * 2, r = 36 + rand() * 36;
+                ctx.beginPath();
+                ctx.arc(110 + Math.cos(a) * r * 1.25, 76 + Math.sin(a) * r * 0.95, 5 + rand() * 4, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            // lake
+            ctx.fillStyle = '#3d9bd4';
+            ctx.strokeStyle = '#2b7aa8';
+            ctx.lineWidth = 3;
+            tracePath(LAKE, true);
+            ctx.fill();
+            ctx.stroke();
+
+            // routes: the one we are on is solid, the other dashed
+            const other = track.name === 'bridge' ? 'forest' : 'bridge';
+            ctx.lineCap = 'round';
+            ctx.lineWidth = 6;
+            ctx.strokeStyle = 'rgba(80,80,90,0.45)';
+            ctx.setLineDash([7, 7]);
+            tracePath(ROUTE[other], false);
+            ctx.stroke();
+            ctx.setLineDash([]);
+            ctx.strokeStyle = '#4a4a55';
+            tracePath(ROUTE.common, false);
+            ctx.stroke();
+            tracePath(ROUTE[track.name], false);
+            ctx.stroke();
+            tracePath(ROUTE.tail, false);
+            ctx.stroke();
+
+            // the bridge itself
+            ctx.strokeStyle = '#a3937a';
+            ctx.lineWidth = 8;
+            tracePath(ROUTE.bridge, false);
+            ctx.stroke();
+            ctx.strokeStyle = '#6f6152';
+            ctx.lineWidth = 2;
+            for (let i = 0; i <= 6; i++) {
+                const x = lerp(140, 80, i / 6);
+                ctx.beginPath();
+                ctx.moveTo(x, 153);
+                ctx.lineTo(x, 165);
+                ctx.stroke();
+            }
+
+            // the car park where every lap starts and ends
+            ctx.fillStyle = '#22313f';
+            ctx.fillRect(150, 264, 20, 6);
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(150, 264, 5, 6);
+            ctx.fillRect(160, 264, 5, 6);
+            ctx.fillStyle = '#3f6fa8';
+            roundRect(ctx, 172, 268, 22, 22, 5);
+            ctx.fill();
+            ctx.fillStyle = '#ffffff';
+            ctx.font = 'bold 17px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('P', 183, 285);
+
+            ctx.fillStyle = 'rgba(255,255,255,0.9)';
+            ctx.font = 'italic bold 15px Arial';
+            ctx.fillText('Jezioro', 110, 218);
+            ctx.fillText('Długie', 110, 234);
+
+            // the rider
+            const me = mapPosition();
+            ctx.fillStyle = '#ffffff';
+            ctx.beginPath();
+            ctx.arc(me[0], me[1], 9, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#e2231a';
+            ctx.beginPath();
+            ctx.arc(me[0], me[1], 6, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.restore();
+            ctx.restore();
+        }
+
+        // ------------------------------------------------------------------
+        // HUD
+        // ------------------------------------------------------------------
+        function panel(x, y, w, h) {
+            ctx.fillStyle = 'rgba(255,255,255,0.86)';
+            ctx.strokeStyle = '#22313f';
+            ctx.lineWidth = 3;
+            roundRect(ctx, x, y, w, h, 12);
+            ctx.fill();
+            ctx.stroke();
+        }
+
+        function formatTime(t) {
+            const m = Math.floor(t / 60);
+            const s = Math.floor(t % 60);
+            return m + ':' + (s < 10 ? '0' : '') + s;
+        }
+
+        function drawHud() {
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'alphabetic';
+
+            // speed
+            panel(16, 16, 210, 84);
+            ctx.fillStyle = '#22313f';
+            ctx.font = 'bold 34px Arial';
+            ctx.fillText('🚲 ' + Math.round(speed / MAX_SPEED * KMH_AT_MAX) + ' km/h', 30, 54);
+            ctx.fillStyle = '#d9dfe3';
+            roundRect(ctx, 30, 66, 182, 16, 8);
+            ctx.fill();
+            ctx.fillStyle = '#27ae60';
+            roundRect(ctx, 30, 66, Math.max(6, 182 * (speed / MAX_SPEED)), 16, 8);
+            ctx.fill();
+
+            // score
+            panel(GW - 246, 16, 230, 108);
+            ctx.fillStyle = '#22313f';
+            ctx.font = 'bold 22px Arial';
+            ctx.fillText('Wyprzedzenia: ' + overtakes, GW - 230, 46);
+            ctx.fillText('Okrążenie: ' + lap, GW - 230, 74);
+            ctx.font = 'bold 18px Arial';
+            ctx.fillStyle = '#5b6b78';
+            ctx.fillText('Czas: ' + formatTime(lapTime) +
+                (bestLap ? '   Naj: ' + formatTime(bestLap) : ''), GW - 230, 100);
+
+            drawMinimap();
+
+            // the choice, while it is still open
+            if (state !== 'ready' && !routeLocked) {
+                const toFork = (FORK_Z - position) / SEG_LEN;
+                if (toFork > 0 && toFork < 130) {
+                    const a = Math.min(1, (130 - toFork) / 25);
+                    ctx.globalAlpha = a;
+                    panel(GW / 2 - 220, 132, 440, 56);
+                    ctx.fillStyle = '#22313f';
+                    ctx.font = 'bold 26px Arial';
+                    ctx.textAlign = 'center';
+                    ctx.fillText('⬅ MOST          LAS ➡', GW / 2, 169);
+                    ctx.globalAlpha = 1;
+                    ctx.textAlign = 'left';
+                }
+            }
+
+            // toasts
+            ctx.textAlign = 'center';
+            for (let i = 0; i < toasts.length; i++) {
+                const t = toasts[i];
+                ctx.globalAlpha = Math.min(1, t.t / 0.5);
+                ctx.font = 'bold 28px Arial';
+                ctx.lineWidth = 5;
+                ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+                ctx.strokeText(t.text, GW / 2, 250 + i * 34 + (1 - t.t / t.life) * -14);
+                ctx.fillStyle = t.color;
+                ctx.fillText(t.text, GW / 2, 250 + i * 34 + (1 - t.t / t.life) * -14);
+                ctx.globalAlpha = 1;
+            }
+            ctx.textAlign = 'left';
+
+            if (state === 'crash') {
+                ctx.fillStyle = 'rgba(20,30,40,0.35)';
+                ctx.fillRect(0, 0, GW, GH);
+                panel(GW / 2 - 230, GH / 2 - 90, 460, 180);
+                ctx.textAlign = 'center';
+                ctx.fillStyle = '#c0392b';
+                ctx.font = 'bold 44px Arial';
+                ctx.fillText('Ups! 🚑', GW / 2, GH / 2 - 34);
+                ctx.fillStyle = '#22313f';
+                ctx.font = 'bold 24px Arial';
+                ctx.fillText('Wracasz na prawą stronę drogi', GW / 2, GH / 2 + 6);
+                ctx.fillStyle = '#d9dfe3';
+                roundRect(ctx, GW / 2 - 170, GH / 2 + 30, 340, 20, 10);
+                ctx.fill();
+                ctx.fillStyle = '#e67e22';
+                const w = 340 * (1 - crashTimer / RESPAWN_TIME);
+                roundRect(ctx, GW / 2 - 170, GH / 2 + 30, Math.max(8, w), 20, 10);
+                ctx.fill();
+                ctx.textAlign = 'left';
+            }
+        }
+
+        // ------------------------------------------------------------------
+        // Main loop
+        // ------------------------------------------------------------------
+        let last = 0;
+        function frame(now) {
+            if (!last) last = now;
+            const dt = Math.min(1 / 24, (now - last) / 1000);
+            last = now;
+            update(dt);
+            render();
+            requestAnimationFrame(frame);
+        }
+
+        resetCars();
+        requestAnimationFrame(frame);
+
+        // exposed for the screenshot helper
+        window.__game = {
+            start: startGame,
+            set: o => {
+                if (o.position !== undefined) position = o.position;
+                if (o.speed !== undefined) speed = o.speed;
+                if (o.playerX !== undefined) playerX = o.playerX;
+                if (o.route !== undefined) { route = o.route; track = TRACKS[route]; }
+            },
+            state: () => ({
+                state: state, position: position, route: route, routeLocked: routeLocked,
+                lap: lap, overtakes: overtakes, bumps: bumps,
+                speed: speed, playerX: playerX, trackLength: track.length
+            })
+        };
+    })();
+    </script>
+</body>
+</html>
