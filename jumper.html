@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="pl">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Jumper - Gierka</title>
+    <title>Skoczek - Gierka</title>
     <style>
         body {
             margin: 0;
@@ -115,14 +115,38 @@
             }
         }
     </style>
+    <style>
+        .back-to-menu {
+            position: fixed;
+            bottom: 14px;
+            left: 14px;
+            z-index: 1000;
+            padding: 10px 16px;
+            background: rgba(255, 255, 255, 0.92);
+            border: 2px solid #2d2b45;
+            border-radius: 12px;
+            color: #2d2b45;
+            font-family: Arial, sans-serif;
+            font-size: 16px;
+            font-weight: bold;
+            text-decoration: none;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+        }
+
+        .back-to-menu:hover {
+            background: #ffffff;
+        }
+    </style>
 </head>
 <body>
+    <a class="back-to-menu" href="index.html">← Menu</a>
+
     <div id="gameContainer">
         <canvas id="gameCanvas" width="800" height="400"></canvas>
         
         <div id="ui">
-            <div>Score: <span id="score">0</span></div>
-            <div class="lives-label">Lives:</div>
+            <div>Punkty: <span id="score">0</span></div>
+            <div class="lives-label">Życia:</div>
             <div class="hearts" id="lives">
                 <span class="heart">❤️</span>
                 <span class="heart">❤️</span>
@@ -131,21 +155,21 @@
         </div>
 
         <div id="instructions">
-            <h2>🏃‍♂️ Jumper</h2>
-            <p>Jump over obstacles coming your way!</p>
-            <p><strong>Controls:</strong></p>
-            <p>🎮 Gamepad: X button</p>
-            <p>⌨️ Keyboard: SPACE</p>
-            <p>📱 Mobile: Tap screen</p>
-            <p><strong>Press any control to start!</strong></p>
+            <h2>🏃‍♂️ Skoczek</h2>
+            <p>Przeskakuj przeszkody, które lecą w twoją stronę!</p>
+            <p><strong>Sterowanie:</strong></p>
+            <p>🎮 Pad: przycisk X</p>
+            <p>⌨️ Klawiatura: SPACJA</p>
+            <p>📱 Telefon: dotknij ekranu</p>
+            <p><strong>Naciśnij cokolwiek, żeby zacząć!</strong></p>
         </div>
 
         <div id="gameOver">
-            <h2>Game Over!</h2>
-            <p>Final Score: <span id="finalScore">0</span></p>
-            <p>Obstacles Jumped: <span id="obstaclesJumped">0</span></p>
-            <button class="button" onclick="restartGame()">Play Again</button>
-            <button class="button" onclick="window.location.href='index.html'">Back to Menu</button>
+            <h2>Koniec gry!</h2>
+            <p>Wynik: <span id="finalScore">0</span></p>
+            <p>Przeskoczone przeszkody: <span id="obstaclesJumped">0</span></p>
+            <button class="button" onclick="restartGame()">Jeszcze raz</button>
+            <button class="button" onclick="window.location.href='index.html'">Powrót do menu</button>
         </div>
     </div>
 

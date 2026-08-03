@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="pl">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Space Coins - Gierka</title>
+    <title>Kosmiczne Monety - Gierka</title>
     <style>
         * {
             margin: 0;
@@ -132,14 +132,38 @@
             }
         }
     </style>
+    <style>
+        .back-to-menu {
+            position: fixed;
+            bottom: 14px;
+            left: 14px;
+            z-index: 1000;
+            padding: 10px 16px;
+            background: rgba(255, 255, 255, 0.92);
+            border: 2px solid #2d2b45;
+            border-radius: 12px;
+            color: #2d2b45;
+            font-family: Arial, sans-serif;
+            font-size: 16px;
+            font-weight: bold;
+            text-decoration: none;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+        }
+
+        .back-to-menu:hover {
+            background: #ffffff;
+        }
+    </style>
 </head>
 <body>
+    <a class="back-to-menu" href="index.html">← Menu</a>
+
     <div id="gameContainer">
         <canvas id="gameCanvas"></canvas>
 
         <div id="ui">
-            <div>Score: <span id="score">0</span></div>
-            <div class="lives-label">Lives:</div>
+            <div>Punkty: <span id="score">0</span></div>
+            <div class="lives-label">Życia:</div>
             <div class="hearts" id="lives">
                 <span class="heart">❤️</span>
                 <span class="heart">❤️</span>
@@ -148,22 +172,22 @@
         </div>
 
         <div id="instructions">
-            <h2>🚀 Space Coins</h2>
-            <p>Collect the shiny coins 🪙 and dodge the bombs 💣!</p>
-            <p>Watch out for the alien ship 👾 — it shoots lasers your way!</p>
-            <p><strong>Controls:</strong></p>
-            <p>⌨️ Keyboard: ← → arrow keys (or A / D)</p>
-            <p>🎮 Gamepad: Left stick or D-pad</p>
-            <p>📱 Mobile: Drag your finger to fly</p>
-            <p><strong>Press any control to start!</strong></p>
+            <h2>🚀 Kosmiczne Monety</h2>
+            <p>Zbieraj świecące monety 🪙 i omijaj bomby 💣!</p>
+            <p>Uważaj na statek kosmitów 👾 — strzela do ciebie laserami!</p>
+            <p><strong>Sterowanie:</strong></p>
+            <p>⌨️ Klawiatura: strzałki ← → (albo A / D)</p>
+            <p>🎮 Pad: lewa gałka albo krzyżak</p>
+            <p>📱 Telefon: przesuwaj palcem po ekranie</p>
+            <p><strong>Naciśnij cokolwiek, żeby zacząć!</strong></p>
         </div>
 
         <div id="gameOver">
-            <h2>💥 Game Over!</h2>
-            <p>Final Score: <span id="finalScore">0</span></p>
-            <p>Coins Collected: <span id="coinsCollected">0</span></p>
-            <button class="button" onclick="restartGame()">Play Again</button>
-            <button class="button" onclick="window.location.href='index.html'">Back to Menu</button>
+            <h2>💥 Koniec gry!</h2>
+            <p>Wynik: <span id="finalScore">0</span></p>
+            <p>Zebrane monety: <span id="coinsCollected">0</span></p>
+            <button class="button" onclick="restartGame()">Jeszcze raz</button>
+            <button class="button" onclick="window.location.href='index.html'">Powrót do menu</button>
         </div>
     </div>
 
@@ -335,35 +359,26 @@
         let dragActive = false;
         let dragX = null;
 
-        function pointerXFromEvent(e, isTouch) {
+        function touchXFromEvent(e) {
             const rect = canvas.getBoundingClientRect();
-            const clientX = isTouch ? e.touches[0].clientX : e.clientX;
-            return clientX - rect.left;
+            return e.touches[0].clientX - rect.left;
         }
 
         canvas.addEventListener('touchstart', (e) => {
             e.preventDefault();
             if (gameState === 'waiting') { startGame(); return; }
             dragActive = true;
-            dragX = pointerXFromEvent(e, true);
+            dragX = touchXFromEvent(e);
         }, { passive: false });
 
         canvas.addEventListener('touchmove', (e) => {
             e.preventDefault();
-            if (dragActive) dragX = pointerXFromEvent(e, true);
+            if (dragActive) dragX = touchXFromEvent(e);
         }, { passive: false });
 
         canvas.addEventListener('touchend', () => { dragActive = false; });
 
-        canvas.addEventListener('mousedown', (e) => {
-            if (gameState === 'waiting') { startGame(); return; }
-            dragActive = true;
-            dragX = pointerXFromEvent(e, false);
-        });
-        window.addEventListener('mousemove', (e) => {
-            if (dragActive) dragX = pointerXFromEvent(e, false);
-        });
-        window.addEventListener('mouseup', () => { dragActive = false; });
+        // Mysz nie steruje statkiem - tylko klawiatura, pad i dotyk.
 
         let gamepadStartPressed = false;
         function pollGamepadStart() {
@@ -558,7 +573,7 @@
             const milestone = Math.floor(score / 100);
             if (milestone > lastMilestone) {
                 lastMilestone = milestone;
-                const messages = ['Awesome! 🌟', 'Great job! 🚀', 'Wow! ✨', 'Super! 🎉', 'Amazing! 🪐'];
+                const messages = ['Super! 🌟', 'Świetnie! 🚀', 'Wow! ✨', 'Brawo! 🎉', 'Ekstra! 🪐'];
                 floatingTexts.push({
                     x: W / 2, y: H * 0.3, text: messages[Math.floor(Math.random() * messages.length)],
                     life: 70, maxLife: 70, vy: -0.4, size: 40, color: '#FFFFFF', big: true
@@ -617,7 +632,7 @@
                     b.timer = 0;
                     playWarningSound();
                     floatingTexts.push({
-                        x: W / 2, y: H * 0.12, text: 'Watch out! 👾',
+                        x: W / 2, y: H * 0.12, text: 'Uwaga! 👾',
                         life: 70, maxLife: 70, vy: -0.2, size: 32, color: '#FFEB3B', big: true
                     });
                 }
@@ -697,7 +712,7 @@
                 });
             }
             floatingTexts.push({
-                x: W / 2, y: H * 0.18, text: 'Coin Rain! 🪙✨',
+                x: W / 2, y: H * 0.18, text: 'Deszcz monet! 🪙✨',
                 life: 70, maxLife: 70, vy: -0.25, size: 34, color: '#FFD700', big: true
             });
             playCoinBurstSound();

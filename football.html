@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="pl">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Football Game</title>
+    <title>Piłka Nożna - Gierka</title>
     <style>
         body {
             margin: 0;
@@ -54,74 +54,98 @@
             max-width: 600px;
         }
     </style>
+    <style>
+        .back-to-menu {
+            position: fixed;
+            bottom: 14px;
+            left: 14px;
+            z-index: 1000;
+            padding: 10px 16px;
+            background: rgba(255, 255, 255, 0.92);
+            border: 2px solid #2d2b45;
+            border-radius: 12px;
+            color: #2d2b45;
+            font-family: Arial, sans-serif;
+            font-size: 16px;
+            font-weight: bold;
+            text-decoration: none;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+        }
+
+        .back-to-menu:hover {
+            background: #ffffff;
+        }
+    </style>
 </head>
 <body>
+    <a class="back-to-menu" href="index.html">← Menu</a>
+
     <div class="instructions">
-        <h2>Football Game</h2>
-        <p><strong>Controls:</strong> WASD or Arrow Keys to move | Gamepad supported</p>
-        <p><strong>Goal:</strong> Hit the ball and score goals!</p>
+        <h2>⚽ Piłka Nożna</h2>
+        <p><strong>Sterowanie:</strong> WASD albo strzałki | pad też działa</p>
+        <p><strong>Cel:</strong> uderzaj piłkę i strzelaj gole!</p>
     </div>
 
     <canvas id="gameCanvas" width="800" height="600"></canvas>
 
     <div class="controls">
         <div class="control-group">
-            <h3>Player Physics</h3>
+            <h3>Fizyka zawodnika</h3>
             <div class="control">
-                <label>Size:</label>
+                <label>Wielkość:</label>
                 <input type="range" id="playerSize" min="15" max="40" value="25">
                 <span id="playerSizeValue">25</span>
             </div>
             <div class="control">
-                <label>Mass:</label>
+                <label>Masa:</label>
                 <input type="range" id="playerMass" min="50" max="200" value="100">
                 <span id="playerMassValue">100</span>
             </div>
             <div class="control">
-                <label>Speed:</label>
+                <label>Prędkość:</label>
                 <input type="range" id="playerSpeed" min="100" max="800" value="700">
                 <span id="playerSpeedValue">700</span>
             </div>
             <div class="control">
-                <label>Friction:</label>
+                <label>Tarcie:</label>
                 <input type="range" id="playerFriction" min="0.01" max="0.2" step="0.01" value="0.08">
                 <span id="playerFrictionValue">0.08</span>
             </div>
         </div>
 
         <div class="control-group">
-            <h3>Ball Physics</h3>
+            <h3>Fizyka piłki</h3>
             <div class="control">
-                <label>Size:</label>
+                <label>Wielkość:</label>
                 <input type="range" id="ballSize" min="8" max="25" value="15">
                 <span id="ballSizeValue">15</span>
             </div>
             <div class="control">
-                <label>Mass:</label>
+                <label>Masa:</label>
                 <input type="range" id="ballMass" min="10" max="100" value="30">
                 <span id="ballMassValue">30</span>
             </div>
             <div class="control">
-                <label>Bounce:</label>
+                <label>Odbicie:</label>
                 <input type="range" id="ballBounce" min="0.3" max="1.0" step="0.1" value="0.8">
                 <span id="ballBounceValue">0.8</span>
             </div>
             <div class="control">
-                <label>Friction:</label>
+                <label>Tarcie:</label>
                 <input type="range" id="ballFriction" min="0.005" max="0.05" step="0.005" value="0.02">
                 <span id="ballFrictionValue">0.02</span>
             </div>
         </div>
 
         <div class="control-group">
-            <h3>Game Settings</h3>
+            <h3>Ustawienia gry</h3>
             <div class="control">
-                <label>Collision Force:</label>
+                <label>Siła zderzenia:</label>
                 <input type="range" id="collisionForce" min="0.5" max="3.0" step="0.1" value="1.5">
                 <span id="collisionForceValue">1.5</span>
             </div>
             <div class="control">
-                <label>Goals to Win:</label>
+                <label>Goli do wygranej:</label>
                 <input type="range" id="goalsToWin" min="1" max="10" value="3">
                 <span id="goalsToWinValue">3</span>
             </div>
@@ -504,9 +528,9 @@
                     
                     ctx.fillStyle = '#FFFFFF';
                     ctx.font = '48px Arial';
-                    ctx.fillText('GAME COMPLETE!', this.width/2, this.height/2 - 20);
+                    ctx.fillText('KONIEC GRY!', this.width/2, this.height/2 - 20);
                     ctx.font = '24px Arial';
-                    ctx.fillText('Reload page to play again', this.width/2, this.height/2 + 30);
+                    ctx.fillText('Odśwież stronę, żeby zagrać jeszcze raz', this.width/2, this.height/2 + 30);
                 }
             }
             
@@ -541,7 +565,7 @@
                 ctx.save();
                 ctx.translate(this.width/2, this.height/2 - 50);
                 ctx.scale(textScale, textScale);
-                ctx.fillText('GOAL!', 0, 0);
+                ctx.fillText('GOL!', 0, 0);
                 ctx.restore();
                 
                 // Countdown

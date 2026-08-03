@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="pl">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>2D Person Walking Game</title>
+    <title>Grzybki - Gierka</title>
     <style>
         body {
             margin: 0;
@@ -54,16 +54,40 @@
             text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
         }
     </style>
+    <style>
+        .back-to-menu {
+            position: fixed;
+            bottom: 14px;
+            left: 14px;
+            z-index: 1000;
+            padding: 10px 16px;
+            background: rgba(255, 255, 255, 0.92);
+            border: 2px solid #2d2b45;
+            border-radius: 12px;
+            color: #2d2b45;
+            font-family: Arial, sans-serif;
+            font-size: 16px;
+            font-weight: bold;
+            text-decoration: none;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+        }
+
+        .back-to-menu:hover {
+            background: #ffffff;
+        }
+    </style>
 </head>
 <body>
+    <a class="back-to-menu" href="index.html">← Menu</a>
+
     <div class="game-container">
-        <div class="title">🚶 2D Person Walking Game</div>
-        <div class="score">🍄 Mushrooms Collected: <span id="mushroomCounter">0</span></div>
-        <div class="score">📏 Size: <span id="sizeIndicator">Small</span> (<span id="sizeProgress">20/60</span>)</div>
+        <div class="title">🍄 Grzybki</div>
+        <div class="score">🍄 Zebrane grzyby: <span id="mushroomCounter">0</span></div>
+        <div class="score">📏 Wielkość: <span id="sizeIndicator">Mały</span> (<span id="sizeProgress">20/60</span>)</div>
         <canvas id="gameCanvas" width="800" height="600"></canvas>
         <div class="controls">
-            <p><strong>Controls:</strong></p>
-            <p>↑↓←→ - Walk in direction | Or use left stick on gamepad</p>
+            <p><strong>Sterowanie:</strong></p>
+            <p>↑↓←→ - chodzenie w wybraną stronę | albo lewa gałka na padzie</p>
         </div>
     </div>
 
@@ -135,15 +159,15 @@
             const controlsElement = document.querySelector('.controls');
             if (gamepadConnected) {
                 controlsElement.innerHTML = `
-                    <p><strong>🎮 PS4 Controller Connected!</strong></p>
-                    <p>Left Stick: Walk in any direction (360°)</p>
-                    <p><em>Keyboard controls still work as backup</em></p>
+                    <p><strong>🎮 Pad PS4 podłączony!</strong></p>
+                    <p>Lewa gałka: chodzenie w każdą stronę (360°)</p>
+                    <p><em>Klawiatura też działa</em></p>
                 `;
             } else {
                 controlsElement.innerHTML = `
-                    <p><strong>Controls:</strong></p>
-                    <p>↑↓←→ - Walk in direction | Or use left stick on gamepad</p>
-                    <p><em>Connect a PS4 controller for smooth 360° movement!</em></p>
+                    <p><strong>Sterowanie:</strong></p>
+                    <p>↑↓←→ - chodzenie w wybraną stronę | albo lewa gałka na padzie</p>
+                    <p><em>Podłącz pada PS4, żeby chodzić płynnie w każdą stronę!</em></p>
                 `;
             }
         }
@@ -448,15 +472,15 @@
             
             // Update size indicator text
             if (person.width <= 25) {
-                sizeIndicator.textContent = 'Small';
+                sizeIndicator.textContent = 'Mały';
             } else if (person.width <= 35) {
-                sizeIndicator.textContent = 'Medium';
+                sizeIndicator.textContent = 'Średni';
             } else if (person.width <= 45) {
-                sizeIndicator.textContent = 'Large';
+                sizeIndicator.textContent = 'Duży';
             } else if (person.width < person.maxSize) {
-                sizeIndicator.textContent = 'Huge';
+                sizeIndicator.textContent = 'Wielki';
             } else {
-                sizeIndicator.textContent = 'Maximum!';
+                sizeIndicator.textContent = 'Maksymalny!';
             }
         }
 

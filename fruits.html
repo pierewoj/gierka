@@ -1,0 +1,1485 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Owocowy Ninja - Gierka</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            background: #1a1330;
+            overflow: hidden;
+            touch-action: none;
+        }
+
+        body.playing {
+            cursor: none;
+        }
+
+        #gameCanvas {
+            display: block;
+            position: fixed;
+            top: 0;
+            left: 0;
+        }
+
+        #hud {
+            position: fixed;
+            top: 16px;
+            left: 16px;
+            display: flex;
+            align-items: center;
+            gap: 18px;
+            background: rgba(255, 255, 255, 0.9);
+            border: 3px solid #2d2b45;
+            border-radius: 16px;
+            padding: 10px 18px;
+            font-size: 26px;
+            font-weight: bold;
+            color: #2d2b45;
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        #hearts {
+            font-size: 24px;
+            letter-spacing: 2px;
+        }
+
+        .heart-lost {
+            opacity: 0.25;
+            filter: grayscale(100%);
+        }
+
+        #topRight {
+            position: fixed;
+            top: 16px;
+            right: 16px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            z-index: 10;
+        }
+
+        #best {
+            background: rgba(255, 255, 255, 0.9);
+            border: 3px solid #2d2b45;
+            border-radius: 16px;
+            padding: 10px 16px;
+            font-size: 20px;
+            font-weight: bold;
+            color: #2d2b45;
+            pointer-events: none;
+        }
+
+        #soundBtn {
+            width: 56px;
+            height: 56px;
+            font-size: 26px;
+            line-height: 1;
+            background: rgba(255, 255, 255, 0.9);
+            border: 3px solid #2d2b45;
+            border-radius: 16px;
+            cursor: pointer;
+        }
+
+        .overlay {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            background: rgba(255, 255, 255, 0.95);
+            border: 5px solid #2d2b45;
+            border-radius: 28px;
+            padding: 34px 44px;
+            color: #2d2b45;
+            box-shadow: 0 18px 40px rgba(0, 0, 0, 0.45);
+            z-index: 20;
+            max-width: 90vw;
+        }
+
+        .overlay h1 {
+            font-size: 44px;
+            margin-bottom: 14px;
+        }
+
+        .overlay p {
+            font-size: 22px;
+            margin-bottom: 10px;
+            line-height: 1.45;
+        }
+
+        .big-score {
+            font-size: 64px;
+            color: #e0453d;
+            margin: 10px 0 4px;
+        }
+
+        .button {
+            background: #ff8c1a;
+            color: white;
+            border: none;
+            border-bottom: 6px solid #c25f00;
+            padding: 20px 48px;
+            font-size: 32px;
+            font-weight: bold;
+            border-radius: 18px;
+            cursor: pointer;
+            margin-top: 18px;
+            font-family: inherit;
+        }
+
+        .button:hover {
+            background: #ffa347;
+        }
+
+        .button:active {
+            transform: translateY(4px);
+            border-bottom-width: 2px;
+        }
+
+        #menuLink {
+            position: fixed;
+            bottom: 14px;
+            left: 16px;
+            color: rgba(255, 255, 255, 0.85);
+            background: rgba(0, 0, 0, 0.35);
+            border-radius: 12px;
+            padding: 8px 14px;
+            font-size: 16px;
+            font-weight: bold;
+            text-decoration: none;
+            z-index: 10;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        @media (max-width: 700px) {
+            #hud { font-size: 20px; padding: 8px 14px; gap: 12px; }
+            .overlay { padding: 24px 26px; }
+            .overlay h1 { font-size: 32px; }
+            .overlay p { font-size: 18px; }
+            .button { font-size: 26px; padding: 16px 34px; }
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas"></canvas>
+
+    <div id="hud">
+        <span>🍉 <span id="score">0</span></span>
+        <span id="hearts"></span>
+    </div>
+
+    <div id="topRight">
+        <div id="best">Rekord: <span id="bestValue">0</span></div>
+        <button id="soundBtn" title="Dźwięk wł./wył.">🔊</button>
+    </div>
+
+    <div id="startScreen" class="overlay">
+        <h1>🍉 Owocowy Ninja 🍓</h1>
+        <p><strong>Przesuwaj myszką</strong> po owocach, żeby je pokroić!</p>
+        <p>Nie trzeba klikać. 💣 Bomby zabierają życie.</p>
+        <button class="button" id="startBtn">GRAJ 🍊</button>
+    </div>
+
+    <div id="gameOver" class="overlay hidden">
+        <h1>Świetne krojenie! 🎉</h1>
+        <p>Pokroiłeś</p>
+        <div class="big-score"><span id="finalScore">0</span></div>
+        <p id="bestLine">Rekord: 0</p>
+        <button class="button" id="againBtn">JESZCZE RAZ 🍉</button>
+    </div>
+
+    <a id="menuLink" href="index.html">← Menu</a>
+
+    <script>
+        // ---------- Tuning knobs ----------
+        // Everything worth fiddling with lives here. Lower GRAVITY = slower, floatier fruit.
+        const CONFIG = {
+            LIVES: 3,                       // hearts before the game ends
+            FRUIT_SCALE: 1.0,               // overall fruit size (1.0 = default, bigger = easier)
+            BLADE_REACH: 1.15,              // slice radius vs fruit radius (higher = more forgiving)
+            BOMB_REACH: 0.95,               // hit radius of a bomb (lower = easier to avoid)
+
+            // Flight speed. Gravity is a fraction of the screen height per second squared,
+            // so arcs look the same on every screen. 0.60 -> a toss lasts roughly 3 seconds.
+            GRAVITY: 0.60,
+            GRAVITY_RAMP: 0.18,             // extra gravity once difficulty is maxed out
+
+            // Difficulty ramps linearly from 0 to 1 over this many sliced fruit.
+            DIFFICULTY_FRUITS: 90,
+
+            // Tosses
+            SPAWN_INTERVAL: 2.5,            // seconds between tosses at the start
+            SPAWN_INTERVAL_MIN: 1.3,        // ... at full difficulty
+            SPAWN_JITTER: 0.15,             // +/- randomness on the interval
+            MAX_FRUIT_PER_TOSS: 3,
+            SECOND_FRUIT_CHANCE: 0.35,      // chance of a 2nd fruit in one toss at the start
+            SECOND_FRUIT_RAMP: 0.35,        // ... extra chance at full difficulty
+            THIRD_FRUIT_RAMP: 0.40,         // chance of a 3rd fruit at full difficulty
+            APEX_MIN: 0.10,                 // how high fruit flies (fraction of screen from the top)
+            APEX_MAX: 0.34,
+
+            // Bombs
+            BOMBS_AFTER_FRUIT: 12,          // no bombs at all until this many fruit are sliced
+            BOMB_CHANCE: 0.10,              // chance of a bomb per toss at the start
+            BOMB_CHANCE_RAMP: 0.12,         // ... extra chance at full difficulty
+            MAX_BOMBS_PER_TOSS: 1,
+
+            // Feel
+            COMBO_WINDOW: 0.42,             // seconds to chain slices into a combo
+            RESTING_SLICE_TIME: 0.25,       // fruit still slices if the mouse stopped this recently
+            TRAIL_LIFE: 170                 // ms the blade streak stays on screen
+        };
+
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const dpr = Math.min(window.devicePixelRatio || 1, 2);
+
+        const TAU = Math.PI * 2;
+        let W = 0, H = 0;
+        let scale = 1;          // size scale so fruit looks right on any screen
+        let gravity = 900;
+
+        let state = 'ready';    // ready | playing | over
+        let score = 0;
+        let lives = CONFIG.LIVES;
+        let fruitsSliced = 0;
+        let best = parseInt(localStorage.getItem('fruitSlicerBest') || '0', 10);
+
+        const fruits = [];      // whole flying fruit and bombs
+        const halves = [];
+        const particles = [];
+        const splats = [];
+        const popups = [];
+        const fireflies = [];
+        const pending = [];     // fruit waiting to be tossed: { delay, isBomb }
+
+        let spawnTimer = 0;
+        let comboCount = 0;
+        let comboTimer = 0;
+        let comboX = 0, comboY = 0;
+        let shakeTimer = 0;
+        let flash = 0;
+        let elapsed = 0;
+
+        function rand(min, max) { return min + Math.random() * (max - min); }
+        function randInt(min, max) { return Math.floor(min + Math.random() * (max - min + 1)); }
+        function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
+        function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+
+        // Stable pseudo-random so painted-on details (seeds, pores) do not flicker
+        function noise(i) {
+            const x = Math.sin(i * 127.1 + 13.7) * 43758.5453;
+            return x - Math.floor(x);
+        }
+
+        // ---------- Fruit artwork ----------
+        function gloss(r, cx, cy, rx, ry, alpha) {
+            ctx.save();
+            ctx.globalAlpha = alpha;
+            ctx.fillStyle = '#ffffff';
+            ctx.beginPath();
+            ctx.ellipse(cx * r, cy * r, rx * r, ry * r, -0.7, 0, TAU);
+            ctx.fill();
+            ctx.restore();
+        }
+
+        function bodyShadow(r) {
+            ctx.shadowColor = 'rgba(0, 0, 0, 0.45)';
+            ctx.shadowBlur = r * 0.5;
+            ctx.shadowOffsetY = r * 0.14;
+        }
+
+        function clearShadow() {
+            ctx.shadowColor = 'transparent';
+            ctx.shadowBlur = 0;
+            ctx.shadowOffsetY = 0;
+        }
+
+        function leaf(r, x, y, len, angle, color) {
+            ctx.save();
+            ctx.translate(x * r, y * r);
+            ctx.rotate(angle);
+            ctx.fillStyle = color;
+            ctx.beginPath();
+            ctx.ellipse(len * r * 0.5, 0, len * r * 0.5, len * r * 0.22, 0, 0, TAU);
+            ctx.fill();
+            ctx.strokeStyle = 'rgba(0, 60, 0, 0.35)';
+            ctx.lineWidth = r * 0.03;
+            ctx.beginPath();
+            ctx.moveTo(0, 0);
+            ctx.lineTo(len * r, 0);
+            ctx.stroke();
+            ctx.restore();
+        }
+
+        function stem(r, x1, y1, x2, y2, width) {
+            ctx.strokeStyle = '#6b4423';
+            ctx.lineWidth = width * r;
+            ctx.lineCap = 'round';
+            ctx.beginPath();
+            ctx.moveTo(x1 * r, y1 * r);
+            ctx.quadraticCurveTo((x1 + x2) * 0.5 * r - r * 0.12, (y1 + y2) * 0.5 * r, x2 * r, y2 * r);
+            ctx.stroke();
+        }
+
+        // --- whole fruit ---
+        function drawWatermelon(r) {
+            const g = ctx.createRadialGradient(-r * 0.35, -r * 0.4, r * 0.1, 0, 0, r * 1.15);
+            g.addColorStop(0, '#9ce65f');
+            g.addColorStop(0.55, '#43a834');
+            g.addColorStop(1, '#14601d');
+            bodyShadow(r);
+            ctx.fillStyle = g;
+            ctx.beginPath();
+            ctx.arc(0, 0, r, 0, TAU);
+            ctx.fill();
+            clearShadow();
+
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(0, 0, r, 0, TAU);
+            ctx.clip();
+            ctx.strokeStyle = 'rgba(14, 74, 24, 0.8)';
+            ctx.lineWidth = r * 0.15;
+            ctx.lineCap = 'round';
+            for (let i = -2; i <= 2; i++) {
+                const x = i * r * 0.44;
+                ctx.beginPath();
+                ctx.moveTo(x - r * 0.2, -r * 1.1);
+                ctx.quadraticCurveTo(x + r * 0.25, 0, x - r * 0.2, r * 1.1);
+                ctx.stroke();
+            }
+            ctx.restore();
+            gloss(r, -0.42, -0.44, 0.26, 0.14, 0.4);
+        }
+
+        function drawOrange(r) {
+            const g = ctx.createRadialGradient(-r * 0.3, -r * 0.35, r * 0.1, 0, 0, r * 1.1);
+            g.addColorStop(0, '#ffcc70');
+            g.addColorStop(0.5, '#ff9d1c');
+            g.addColorStop(1, '#d75c00');
+            bodyShadow(r);
+            ctx.fillStyle = g;
+            ctx.beginPath();
+            ctx.arc(0, 0, r, 0, TAU);
+            ctx.fill();
+            clearShadow();
+
+            ctx.fillStyle = 'rgba(168, 76, 0, 0.22)';
+            for (let i = 0; i < 40; i++) {
+                const a = i * 2.399;
+                const rr = r * 0.92 * Math.sqrt(i / 40);
+                ctx.beginPath();
+                ctx.arc(Math.cos(a) * rr, Math.sin(a) * rr, r * 0.04, 0, TAU);
+                ctx.fill();
+            }
+            ctx.fillStyle = '#a85a12';
+            ctx.beginPath();
+            ctx.arc(0, -r * 0.9, r * 0.1, 0, TAU);
+            ctx.fill();
+            leaf(r, 0.05, -0.95, 0.8, -0.5, '#3fa93f');
+            gloss(r, -0.4, -0.42, 0.24, 0.13, 0.45);
+        }
+
+        function applePath(r) {
+            ctx.beginPath();
+            ctx.moveTo(0, -r * 0.68);
+            ctx.bezierCurveTo(-r * 0.35, -r * 1.05, -r * 1.12, -r * 0.7, -r * 1.0, r * 0.06);
+            ctx.bezierCurveTo(-r * 0.92, r * 0.78, -r * 0.4, r * 1.06, 0, r * 0.8);
+            ctx.bezierCurveTo(r * 0.4, r * 1.06, r * 0.92, r * 0.78, r * 1.0, r * 0.06);
+            ctx.bezierCurveTo(r * 1.12, -r * 0.7, r * 0.35, -r * 1.05, 0, -r * 0.68);
+            ctx.closePath();
+        }
+
+        function drawApple(r) {
+            stem(r, 0, -0.65, 0.14, -1.28, 0.1);
+            leaf(r, 0.14, -1.2, 0.7, -0.25, '#3fa93f');
+            const g = ctx.createRadialGradient(-r * 0.35, -r * 0.4, r * 0.1, 0, 0, r * 1.25);
+            g.addColorStop(0, '#ff8a7a');
+            g.addColorStop(0.45, '#e63946');
+            g.addColorStop(1, '#96121f');
+            bodyShadow(r);
+            ctx.fillStyle = g;
+            applePath(r);
+            ctx.fill();
+            clearShadow();
+            gloss(r, -0.45, -0.35, 0.22, 0.13, 0.5);
+        }
+
+        function lemonPath(r) {
+            ctx.beginPath();
+            ctx.moveTo(-r * 1.05, 0);
+            ctx.bezierCurveTo(-r * 0.8, -r * 0.85, r * 0.8, -r * 0.85, r * 1.05, 0);
+            ctx.bezierCurveTo(r * 0.8, r * 0.85, -r * 0.8, r * 0.85, -r * 1.05, 0);
+            ctx.closePath();
+        }
+
+        function drawLemon(r) {
+            const g = ctx.createRadialGradient(-r * 0.3, -r * 0.35, r * 0.05, 0, 0, r * 1.1);
+            g.addColorStop(0, '#fff3a8');
+            g.addColorStop(0.5, '#ffd93b');
+            g.addColorStop(1, '#d9a400');
+            bodyShadow(r);
+            ctx.fillStyle = g;
+            lemonPath(r);
+            ctx.fill();
+            clearShadow();
+
+            ctx.save();
+            lemonPath(r);
+            ctx.clip();
+            ctx.fillStyle = 'rgba(190, 145, 0, 0.2)';
+            for (let i = 0; i < 26; i++) {
+                const x = (noise(i) - 0.5) * 2 * r;
+                const y = (noise(i + 50) - 0.5) * 1.4 * r;
+                ctx.beginPath();
+                ctx.arc(x, y, r * 0.035, 0, TAU);
+                ctx.fill();
+            }
+            ctx.restore();
+            gloss(r, -0.35, -0.3, 0.28, 0.1, 0.5);
+        }
+
+        function strawberryPath(r) {
+            ctx.beginPath();
+            ctx.moveTo(0, r * 1.08);
+            ctx.bezierCurveTo(-r * 0.98, r * 0.35, -r * 0.95, -r * 0.72, 0, -r * 0.7);
+            ctx.bezierCurveTo(r * 0.95, -r * 0.72, r * 0.98, r * 0.35, 0, r * 1.08);
+            ctx.closePath();
+        }
+
+        function drawStrawberry(r) {
+            const g = ctx.createRadialGradient(-r * 0.3, -r * 0.3, r * 0.08, 0, 0, r * 1.2);
+            g.addColorStop(0, '#ff7a8a');
+            g.addColorStop(0.45, '#e8283f');
+            g.addColorStop(1, '#96101f');
+            bodyShadow(r);
+            ctx.fillStyle = g;
+            strawberryPath(r);
+            ctx.fill();
+            clearShadow();
+
+            ctx.save();
+            strawberryPath(r);
+            ctx.clip();
+            ctx.fillStyle = 'rgba(255, 226, 120, 0.95)';
+            for (let i = 0; i < 22; i++) {
+                const x = (noise(i + 3) - 0.5) * 1.7 * r;
+                const y = (noise(i + 90) - 0.45) * 1.7 * r;
+                ctx.save();
+                ctx.translate(x, y);
+                ctx.rotate(0.4);
+                ctx.beginPath();
+                ctx.ellipse(0, 0, r * 0.055, r * 0.035, 0, 0, TAU);
+                ctx.fill();
+                ctx.restore();
+            }
+            ctx.restore();
+
+            ctx.fillStyle = '#35a03a';
+            for (let i = 0; i < 5; i++) {
+                const a = -Math.PI / 2 + (i - 2) * 0.55;
+                ctx.save();
+                ctx.translate(0, -r * 0.62);
+                ctx.rotate(a + Math.PI / 2);
+                ctx.beginPath();
+                ctx.ellipse(0, -r * 0.24, r * 0.16, r * 0.3, 0, 0, TAU);
+                ctx.fill();
+                ctx.restore();
+            }
+            stem(r, 0, -0.75, 0.05, -1.05, 0.09);
+            gloss(r, -0.35, -0.2, 0.2, 0.1, 0.45);
+        }
+
+        function drawPlum(r) {
+            const g = ctx.createRadialGradient(-r * 0.32, -r * 0.38, r * 0.08, 0, 0, r * 1.15);
+            g.addColorStop(0, '#c489e8');
+            g.addColorStop(0.45, '#8b3fbd');
+            g.addColorStop(1, '#4a1d6b');
+            bodyShadow(r);
+            ctx.fillStyle = g;
+            ctx.beginPath();
+            ctx.ellipse(0, 0, r * 0.94, r, 0, 0, TAU);
+            ctx.fill();
+            clearShadow();
+
+            ctx.strokeStyle = 'rgba(50, 15, 80, 0.45)';
+            ctx.lineWidth = r * 0.07;
+            ctx.beginPath();
+            ctx.moveTo(0, -r * 0.95);
+            ctx.quadraticCurveTo(-r * 0.16, 0, 0, r * 0.95);
+            ctx.stroke();
+            stem(r, 0, -0.9, 0.1, -1.2, 0.09);
+            gloss(r, -0.4, -0.42, 0.22, 0.12, 0.4);
+        }
+
+        function pearPath(r) {
+            ctx.beginPath();
+            ctx.moveTo(0, -r * 0.98);
+            ctx.bezierCurveTo(-r * 0.48, -r * 0.92, -r * 0.44, -r * 0.25, -r * 0.56, r * 0.12);
+            ctx.bezierCurveTo(-r * 1.02, r * 0.5, -r * 0.78, r * 1.06, 0, r * 1.02);
+            ctx.bezierCurveTo(r * 0.78, r * 1.06, r * 1.02, r * 0.5, r * 0.56, r * 0.12);
+            ctx.bezierCurveTo(r * 0.44, -r * 0.25, r * 0.48, -r * 0.92, 0, -r * 0.98);
+            ctx.closePath();
+        }
+
+        function drawPear(r) {
+            stem(r, 0, -0.95, 0.08, -1.3, 0.09);
+            leaf(r, 0.08, -1.24, 0.62, -0.15, '#3fa93f');
+            const g = ctx.createRadialGradient(-r * 0.3, -r * 0.1, r * 0.1, 0, r * 0.3, r * 1.3);
+            g.addColorStop(0, '#f2ff9e');
+            g.addColorStop(0.5, '#bfd93a');
+            g.addColorStop(1, '#7d9412');
+            bodyShadow(r);
+            ctx.fillStyle = g;
+            pearPath(r);
+            ctx.fill();
+            clearShadow();
+            gloss(r, -0.4, 0.25, 0.2, 0.12, 0.45);
+        }
+
+        // --- sliced halves (drawn in the upper half plane, flat edge on the x axis) ---
+        function fillHalfCircle(r, style) {
+            ctx.fillStyle = style;
+            ctx.beginPath();
+            ctx.arc(0, 0, r, Math.PI, 0);
+            ctx.closePath();
+            ctx.fill();
+        }
+
+        function clipUpperHalf(r) {
+            ctx.beginPath();
+            ctx.rect(-r * 3, -r * 3, r * 6, r * 3);
+            ctx.clip();
+        }
+
+        function drawWatermelonHalf(r) {
+            fillHalfCircle(r, '#2f7d32');
+            fillHalfCircle(r * 0.93, '#eafbe0');
+            const g = ctx.createRadialGradient(0, -r * 0.25, r * 0.05, 0, 0, r * 0.9);
+            g.addColorStop(0, '#ff8095');
+            g.addColorStop(1, '#dc2440');
+            fillHalfCircle(r * 0.86, g);
+            ctx.fillStyle = '#33200f';
+            for (let i = 0; i < 8; i++) {
+                const a = Math.PI + ((i + 0.5) / 8) * Math.PI;
+                const rr = r * (i % 2 === 0 ? 0.6 : 0.38);
+                ctx.save();
+                ctx.translate(Math.cos(a) * rr, Math.sin(a) * rr);
+                ctx.rotate(a + Math.PI / 2);
+                ctx.beginPath();
+                ctx.ellipse(0, 0, r * 0.045, r * 0.075, 0, 0, TAU);
+                ctx.fill();
+                ctx.restore();
+            }
+            gloss(r, -0.3, -0.45, 0.2, 0.07, 0.3);
+        }
+
+        function drawCitrusHalf(r, peel, pith, flesh, fleshLight) {
+            fillHalfCircle(r, peel);
+            fillHalfCircle(r * 0.9, pith);
+            const g = ctx.createRadialGradient(0, -r * 0.2, r * 0.05, 0, 0, r * 0.85);
+            g.addColorStop(0, fleshLight);
+            g.addColorStop(1, flesh);
+            fillHalfCircle(r * 0.84, g);
+
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(0, 0, r * 0.84, Math.PI, 0);
+            ctx.closePath();
+            ctx.clip();
+            ctx.strokeStyle = pith;
+            ctx.lineWidth = r * 0.05;
+            for (let i = 0; i <= 8; i++) {
+                const a = Math.PI + (i / 8) * Math.PI;
+                ctx.beginPath();
+                ctx.moveTo(0, 0);
+                ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r);
+                ctx.stroke();
+            }
+            ctx.fillStyle = pith;
+            ctx.beginPath();
+            ctx.arc(0, 0, r * 0.09, 0, TAU);
+            ctx.fill();
+            ctx.restore();
+            gloss(r, -0.3, -0.42, 0.18, 0.06, 0.35);
+        }
+
+        function drawOrangeHalf(r) { drawCitrusHalf(r, '#e07c0a', '#ffe0b0', '#ff9c2b', '#ffc46b'); }
+        function drawLemonHalf(r) { drawCitrusHalf(r, '#e0b900', '#fff6c9', '#ffdc4a', '#fff08a'); }
+
+        function drawAppleHalf(r) {
+            ctx.save();
+            clipUpperHalf(r);
+            applePath(r);
+            ctx.fillStyle = '#fff5da';
+            ctx.fill();
+            ctx.strokeStyle = '#d92d3d';
+            ctx.lineWidth = r * 0.16;
+            ctx.stroke();
+            ctx.strokeStyle = 'rgba(205, 170, 110, 0.55)';
+            ctx.lineWidth = r * 0.045;
+            ctx.beginPath();
+            ctx.ellipse(0, -r * 0.24, r * 0.28, r * 0.24, 0, 0, TAU);
+            ctx.stroke();
+            ctx.fillStyle = '#5b3a1a';
+            ctx.beginPath();
+            ctx.ellipse(-r * 0.11, -r * 0.24, r * 0.06, r * 0.1, -0.35, 0, TAU);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.ellipse(r * 0.11, -r * 0.24, r * 0.06, r * 0.1, 0.35, 0, TAU);
+            ctx.fill();
+            ctx.restore();
+        }
+
+        function drawStrawberryHalf(r) {
+            ctx.save();
+            clipUpperHalf(r);
+            strawberryPath(r);
+            const g = ctx.createLinearGradient(0, -r, 0, r * 0.2);
+            g.addColorStop(0, '#ffe6ea');
+            g.addColorStop(1, '#ffabbb');
+            ctx.fillStyle = g;
+            ctx.fill();
+            ctx.strokeStyle = '#e8283f';
+            ctx.lineWidth = r * 0.18;
+            ctx.stroke();
+            ctx.fillStyle = 'rgba(255, 252, 248, 0.75)';
+            ctx.beginPath();
+            ctx.ellipse(0, -r * 0.32, r * 0.13, r * 0.3, 0, 0, TAU);
+            ctx.fill();
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.55)';
+            ctx.lineWidth = r * 0.05;
+            ctx.lineCap = 'round';
+            for (let i = -1; i <= 1; i += 2) {
+                ctx.beginPath();
+                ctx.moveTo(i * r * 0.2, -r * 0.2);
+                ctx.quadraticCurveTo(i * r * 0.5, -r * 0.4, i * r * 0.42, -r * 0.62);
+                ctx.stroke();
+            }
+            ctx.restore();
+        }
+
+        function drawPlumHalf(r) {
+            fillHalfCircle(r, '#6b2a96');
+            const g = ctx.createRadialGradient(0, -r * 0.2, r * 0.05, 0, 0, r * 0.9);
+            g.addColorStop(0, '#ffe08a');
+            g.addColorStop(1, '#f0a53c');
+            fillHalfCircle(r * 0.86, g);
+            ctx.fillStyle = '#7a4a1e';
+            ctx.beginPath();
+            ctx.ellipse(0, -r * 0.32, r * 0.2, r * 0.28, 0, 0, TAU);
+            ctx.fill();
+            gloss(r, -0.3, -0.5, 0.16, 0.06, 0.3);
+        }
+
+        function drawPearHalf(r) {
+            ctx.save();
+            clipUpperHalf(r);
+            ctx.translate(0, -r * 0.32);   // keep the fat part of the pear in the visible half
+            pearPath(r);
+            ctx.fillStyle = '#f8ffd9';
+            ctx.fill();
+            ctx.strokeStyle = '#a9c92a';
+            ctx.lineWidth = r * 0.16;
+            ctx.stroke();
+            ctx.strokeStyle = 'rgba(190, 200, 120, 0.6)';
+            ctx.lineWidth = r * 0.04;
+            ctx.beginPath();
+            ctx.ellipse(0, r * 0.2, r * 0.24, r * 0.22, 0, 0, TAU);
+            ctx.stroke();
+            ctx.fillStyle = '#5b3a1a';
+            ctx.beginPath();
+            ctx.ellipse(-r * 0.1, r * 0.2, r * 0.06, r * 0.1, -0.35, 0, TAU);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.ellipse(r * 0.1, r * 0.2, r * 0.06, r * 0.1, 0.35, 0, TAU);
+            ctx.fill();
+            ctx.restore();
+        }
+
+        const FRUIT_TYPES = [
+            { id: 'watermelon', baseR: 62, juice: '#ff3355', draw: drawWatermelon, half: drawWatermelonHalf, note: 300 },
+            { id: 'orange', baseR: 46, juice: '#ff9a1f', draw: drawOrange, half: drawOrangeHalf, note: 380 },
+            { id: 'apple', baseR: 44, juice: '#e63946', draw: drawApple, half: drawAppleHalf, note: 420 },
+            { id: 'lemon', baseR: 42, juice: '#ffd93b', draw: drawLemon, half: drawLemonHalf, note: 480 },
+            { id: 'strawberry', baseR: 40, juice: '#ff5470', draw: drawStrawberry, half: drawStrawberryHalf, note: 540 },
+            { id: 'plum', baseR: 38, juice: '#a349d6', draw: drawPlum, half: drawPlumHalf, note: 600 },
+            { id: 'pear', baseR: 46, juice: '#c3e33f', draw: drawPear, half: drawPearHalf, note: 340 }
+        ];
+
+        function drawBomb(r, t) {
+            const pulse = 0.5 + 0.5 * Math.sin(t * 9);
+            ctx.save();
+            ctx.globalCompositeOperation = 'lighter';
+            const glow = ctx.createRadialGradient(0, 0, r * 0.7, 0, 0, r * 1.9);
+            glow.addColorStop(0, 'rgba(255, 60, 50, ' + (0.3 + 0.25 * pulse) + ')');
+            glow.addColorStop(1, 'rgba(255, 60, 50, 0)');
+            ctx.fillStyle = glow;
+            ctx.beginPath();
+            ctx.arc(0, 0, r * 1.9, 0, TAU);
+            ctx.fill();
+            ctx.restore();
+
+            ctx.fillStyle = '#4b5563';
+            ctx.fillRect(-r * 0.22, -r * 1.14, r * 0.44, r * 0.32);
+            ctx.strokeStyle = '#c9a227';
+            ctx.lineWidth = r * 0.13;
+            ctx.lineCap = 'round';
+            ctx.beginPath();
+            ctx.moveTo(0, -r * 1.05);
+            ctx.quadraticCurveTo(r * 0.6, -r * 1.5, r * 0.44, -r * 1.85);
+            ctx.stroke();
+
+            const g = ctx.createRadialGradient(-r * 0.35, -r * 0.4, r * 0.08, 0, 0, r * 1.2);
+            g.addColorStop(0, '#7b8390');
+            g.addColorStop(0.45, '#2b2f36');
+            g.addColorStop(1, '#05060a');
+            bodyShadow(r);
+            ctx.fillStyle = g;
+            ctx.beginPath();
+            ctx.arc(0, 0, r, 0, TAU);
+            ctx.fill();
+            clearShadow();
+            gloss(r, -0.42, -0.44, 0.22, 0.1, 0.35);
+
+            // burning fuse
+            ctx.save();
+            ctx.globalCompositeOperation = 'lighter';
+            const spark = ctx.createRadialGradient(r * 0.44, -r * 1.85, 0, r * 0.44, -r * 1.85, r * (0.42 + 0.14 * pulse));
+            spark.addColorStop(0, '#ffffff');
+            spark.addColorStop(0.4, '#ffd23f');
+            spark.addColorStop(1, 'rgba(255, 90, 0, 0)');
+            ctx.fillStyle = spark;
+            ctx.beginPath();
+            ctx.arc(r * 0.44, -r * 1.85, r * (0.42 + 0.14 * pulse), 0, TAU);
+            ctx.fill();
+            ctx.restore();
+        }
+
+        // ---------- Sizing ----------
+        function resizeCanvas() {
+            W = window.innerWidth;
+            H = window.innerHeight;
+            canvas.width = W * dpr;
+            canvas.height = H * dpr;
+            canvas.style.width = W + 'px';
+            canvas.style.height = H + 'px';
+            ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+            scale = clamp(Math.min(W, H) / 760, 0.65, 1.5) * CONFIG.FRUIT_SCALE;
+            makeFireflies();
+        }
+
+        function makeFireflies() {
+            fireflies.length = 0;
+            const count = Math.round((W * H) / 60000);
+            for (let i = 0; i < count; i++) {
+                fireflies.push({
+                    x: Math.random() * W,
+                    y: Math.random() * H,
+                    r: rand(2, 5),
+                    speed: rand(6, 22),
+                    drift: rand(-10, 10),
+                    phase: Math.random() * TAU
+                });
+            }
+        }
+
+        window.addEventListener('resize', resizeCanvas);
+
+        // ---------- Sound ----------
+        let audioCtx = null;
+        let soundOn = localStorage.getItem('fruitSlicerSound') !== 'off';
+        let noiseBuf = null;
+        const soundBtn = document.getElementById('soundBtn');
+        soundBtn.textContent = soundOn ? '🔊' : '🔇';
+
+        function ensureAudio() {
+            if (!soundOn) return null;
+            if (!audioCtx) {
+                const Ctor = window.AudioContext || window.webkitAudioContext;
+                if (!Ctor) return null;
+                audioCtx = new Ctor();
+            }
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            if (!noiseBuf) {
+                noiseBuf = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.7, audioCtx.sampleRate);
+                const data = noiseBuf.getChannelData(0);
+                for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+            }
+            return audioCtx;
+        }
+
+        function playNoise(duration, filterType, freqStart, freqEnd, volume) {
+            const ac = ensureAudio();
+            if (!ac) return;
+            const src = ac.createBufferSource();
+            src.buffer = noiseBuf;
+            const filter = ac.createBiquadFilter();
+            filter.type = filterType;
+            filter.frequency.setValueAtTime(freqStart, ac.currentTime);
+            filter.frequency.exponentialRampToValueAtTime(Math.max(60, freqEnd), ac.currentTime + duration);
+            const gain = ac.createGain();
+            gain.gain.setValueAtTime(volume, ac.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + duration);
+            src.connect(filter);
+            filter.connect(gain);
+            gain.connect(ac.destination);
+            src.start();
+            src.stop(ac.currentTime + duration);
+        }
+
+        function playTone(freqStart, freqEnd, duration, type, volume, delay) {
+            const ac = ensureAudio();
+            if (!ac) return;
+            const t0 = ac.currentTime + (delay || 0);
+            const osc = ac.createOscillator();
+            osc.type = type || 'sine';
+            osc.frequency.setValueAtTime(freqStart, t0);
+            osc.frequency.exponentialRampToValueAtTime(Math.max(30, freqEnd), t0 + duration);
+            const gain = ac.createGain();
+            gain.gain.setValueAtTime(0.0001, t0);
+            gain.gain.exponentialRampToValueAtTime(volume, t0 + 0.012);
+            gain.gain.exponentialRampToValueAtTime(0.0001, t0 + duration);
+            osc.connect(gain);
+            gain.connect(ac.destination);
+            osc.start(t0);
+            osc.stop(t0 + duration + 0.02);
+        }
+
+        function playSlice(note) {
+            playNoise(0.18, 'bandpass', 2600, 700, 0.25);
+            playTone(note * 1.6, note * 0.7, 0.16, 'triangle', 0.16, 0.02);
+        }
+
+        function playCombo(n) {
+            for (let i = 0; i < Math.min(n, 4); i++) {
+                playTone(520 * Math.pow(1.26, i), 520 * Math.pow(1.26, i) * 1.5, 0.16, 'sine', 0.16, i * 0.08);
+            }
+        }
+
+        function playBoom() {
+            playNoise(0.7, 'lowpass', 900, 90, 0.5);
+            playTone(160, 40, 0.55, 'sine', 0.3, 0);
+        }
+
+        function playGameOverSound() {
+            playTone(440, 400, 0.22, 'triangle', 0.2, 0);
+            playTone(330, 300, 0.22, 'triangle', 0.2, 0.2);
+            playTone(220, 160, 0.5, 'triangle', 0.2, 0.4);
+        }
+
+        soundBtn.addEventListener('click', () => {
+            soundOn = !soundOn;
+            localStorage.setItem('fruitSlicerSound', soundOn ? 'on' : 'off');
+            soundBtn.textContent = soundOn ? '🔊' : '🔇';
+            if (soundOn) playSlice(400);
+            soundBtn.blur();
+        });
+
+        // ---------- Mouse blade ----------
+        const trail = [];
+        let pointerX = -999, pointerY = -999;
+        let pointerSeen = false;
+        let lastMoveTime = -10;
+
+        function onPointerMove(e) {
+            const rect = canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            const now = performance.now();
+            if (pointerSeen) checkSlice(pointerX, pointerY, x, y);
+            pointerX = x;
+            pointerY = y;
+            pointerSeen = true;
+            lastMoveTime = elapsed;
+            trail.push({ x, y, t: now });
+            if (trail.length > 40) trail.shift();
+        }
+
+        window.addEventListener('pointermove', onPointerMove);
+        window.addEventListener('pointerdown', (e) => { ensureAudio(); onPointerMove(e); });
+
+        function segmentHitsCircle(x1, y1, x2, y2, cx, cy, rad) {
+            const dx = x2 - x1, dy = y2 - y1;
+            const lenSq = dx * dx + dy * dy;
+            let t = 0;
+            if (lenSq > 0) t = clamp(((cx - x1) * dx + (cy - y1) * dy) / lenSq, 0, 1);
+            const px = x1 + dx * t, py = y1 + dy * t;
+            const ddx = cx - px, ddy = cy - py;
+            return ddx * ddx + ddy * ddy <= rad * rad;
+        }
+
+        function checkSlice(x1, y1, x2, y2) {
+            if (state === 'over') return;
+            const angle = (x1 === x2 && y1 === y2) ? rand(0, Math.PI) : Math.atan2(y2 - y1, x2 - x1);
+            for (const f of fruits) {
+                if (f.sliced) continue;
+                const hitR = f.r * (f.isBomb ? CONFIG.BOMB_REACH : CONFIG.BLADE_REACH);
+                if (segmentHitsCircle(x1, y1, x2, y2, f.x, f.y, hitR)) {
+                    if (f.isBomb) hitBomb(f);
+                    else sliceFruit(f, angle);
+                }
+            }
+        }
+
+        // ---------- Slicing ----------
+        function sliceFruit(f, angle) {
+            f.sliced = true;
+            const type = f.type;
+            for (const side of [-1, 1]) {
+                const nAngle = angle + side * Math.PI / 2;
+                const nx = Math.cos(nAngle), ny = Math.sin(nAngle);
+                const push = rand(55, 115) * scale;
+                halves.push({
+                    type: type,
+                    x: f.x + nx * f.r * 0.15,
+                    y: f.y + ny * f.r * 0.15,
+                    vx: f.vx * 0.85 + nx * push,
+                    vy: f.vy * 0.85 + ny * push - 30,
+                    r: f.r,
+                    rot: side === -1 ? angle : angle + Math.PI,
+                    spin: rand(-2, 2) + side * 1.4
+                });
+            }
+
+            spawnJuice(f.x, f.y, type.juice, angle, 18);
+            addSplat(f.x, f.y, type.juice, f.r);
+            playSlice(type.note);
+
+            if (state === 'playing') {
+                score++;
+                fruitsSliced++;
+                comboCount++;
+                comboTimer = CONFIG.COMBO_WINDOW;
+                comboX = f.x;
+                comboY = f.y;
+                popups.push({ x: f.x, y: f.y - f.r * 0.4, text: '+1', color: '#ffffff', size: 26 * scale, life: 0.8, maxLife: 0.8 });
+                updateHud();
+            }
+        }
+
+        function hitBomb(b) {
+            b.sliced = true;
+            b.dead = true;
+            playBoom();
+            shakeTimer = 0.45;
+            flash = 0.55;
+            spawnExplosion(b.x, b.y);
+            comboCount = 0;
+            if (state !== 'playing') return;
+            lives--;
+            updateHud();
+            popups.push({ x: b.x, y: b.y, text: 'BUM!', color: '#ff5a4d', size: 44 * scale, life: 1.1, maxLife: 1.1 });
+            if (lives <= 0) endGame();
+        }
+
+        function spawnJuice(x, y, color, angle, count) {
+            for (let i = 0; i < count; i++) {
+                const a = angle + rand(-Math.PI, Math.PI);
+                const speed = rand(60, 340) * scale;
+                particles.push({
+                    x: x, y: y,
+                    vx: Math.cos(a) * speed,
+                    vy: Math.sin(a) * speed - 60,
+                    r: rand(3, 9) * scale,
+                    color: color,
+                    life: rand(0.5, 1.1),
+                    maxLife: 1.1,
+                    grav: 1
+                });
+            }
+        }
+
+        function spawnExplosion(x, y) {
+            for (let i = 0; i < 34; i++) {
+                const a = rand(0, TAU);
+                const speed = rand(80, 520) * scale;
+                particles.push({
+                    x: x, y: y,
+                    vx: Math.cos(a) * speed,
+                    vy: Math.sin(a) * speed,
+                    r: rand(3, 10) * scale,
+                    color: pick(['#ffd23f', '#ff8c1a', '#ff4d2e', '#ffffff']),
+                    life: rand(0.4, 0.9),
+                    maxLife: 0.9,
+                    grav: 0.4
+                });
+            }
+            for (let i = 0; i < 12; i++) {
+                const a = rand(0, TAU);
+                particles.push({
+                    x: x, y: y,
+                    vx: Math.cos(a) * rand(20, 120) * scale,
+                    vy: Math.sin(a) * rand(20, 120) * scale - 40,
+                    r: rand(14, 30) * scale,
+                    color: 'rgba(150, 145, 160, 0.45)',
+                    life: rand(0.7, 1.4),
+                    maxLife: 1.4,
+                    grav: -0.15
+                });
+            }
+        }
+
+        function addSplat(x, y, color, r) {
+            const blobs = [];
+            for (let i = 0; i < 7; i++) {
+                blobs.push({
+                    dx: rand(-1, 1) * r * 0.9,
+                    dy: rand(-1, 1) * r * 0.9,
+                    r: rand(0.18, 0.55) * r
+                });
+            }
+            splats.push({ x: x, y: y, color: color, blobs: blobs, life: 3.5, maxLife: 3.5 });
+            if (splats.length > 40) splats.shift();
+        }
+
+        // ---------- Spawning ----------
+        function difficulty() {
+            return clamp(fruitsSliced / CONFIG.DIFFICULTY_FRUITS, 0, 1);
+        }
+
+        function scheduleWave() {
+            const diff = difficulty();
+            let count = 1;
+            if (state === 'playing') {
+                if (Math.random() < CONFIG.SECOND_FRUIT_CHANCE + diff * CONFIG.SECOND_FRUIT_RAMP) count++;
+                if (Math.random() < diff * CONFIG.THIRD_FRUIT_RAMP) count++;
+                count = Math.min(count, CONFIG.MAX_FRUIT_PER_TOSS);
+            }
+            for (let i = 0; i < count; i++) {
+                pending.push({ delay: i * rand(0.08, 0.22), isBomb: false });
+            }
+            if (state === 'playing' && fruitsSliced >= CONFIG.BOMBS_AFTER_FRUIT) {
+                const bombChance = CONFIG.BOMB_CHANCE + diff * CONFIG.BOMB_CHANCE_RAMP;
+                for (let i = 0; i < CONFIG.MAX_BOMBS_PER_TOSS; i++) {
+                    if (Math.random() < bombChance) pending.push({ delay: rand(0.1, 0.5), isBomb: true });
+                }
+            }
+            const base = CONFIG.SPAWN_INTERVAL + (CONFIG.SPAWN_INTERVAL_MIN - CONFIG.SPAWN_INTERVAL) * diff;
+            spawnTimer = base * rand(1 - CONFIG.SPAWN_JITTER, 1 + CONFIG.SPAWN_JITTER);
+        }
+
+        function tossFruit(isBomb) {
+            const type = isBomb ? null : pick(FRUIT_TYPES);
+            const r = (isBomb ? 40 : type.baseR) * scale;
+            const x = rand(W * 0.14, W * 0.86);
+            const apexY = rand(H * CONFIG.APEX_MIN, H * CONFIG.APEX_MAX);
+            const rise = Math.max(H * 0.4, H + r - apexY);
+            const vy = -Math.sqrt(2 * gravity * rise);
+            const airTime = (2 * Math.abs(vy)) / gravity;
+            const towardCenter = (W / 2 - x) / airTime;
+            const vx = towardCenter * rand(0.2, 0.9) + rand(-40, 40) * scale;
+            fruits.push({
+                type: type,
+                isBomb: isBomb,
+                x: x,
+                y: H + r * 1.2,
+                vx: vx,
+                vy: vy,
+                r: r,
+                rot: rand(0, TAU),
+                spin: isBomb ? rand(-0.5, 0.5) : rand(-1.8, 1.8),
+                sliced: false,
+                dead: false,
+                age: 0
+            });
+        }
+
+        // ---------- Game flow ----------
+        const startScreen = document.getElementById('startScreen');
+        const gameOverScreen = document.getElementById('gameOver');
+        const scoreEl = document.getElementById('score');
+        const heartsEl = document.getElementById('hearts');
+        const bestValueEl = document.getElementById('bestValue');
+
+        // 1 owoc, 2-4 owoce, 5+ owoców (z wyjątkiem 12-14)
+        function polishFruitCount(n) {
+            const last = n % 10, lastTwo = n % 100;
+            if (n === 1) return n + ' owoc';
+            if (last >= 2 && last <= 4 && !(lastTwo >= 12 && lastTwo <= 14)) return n + ' owoce';
+            return n + ' owoców';
+        }
+
+        function updateHud() {
+            scoreEl.textContent = score;
+            let html = '';
+            for (let i = 0; i < CONFIG.LIVES; i++) {
+                html += '<span class="' + (i < lives ? '' : 'heart-lost') + '">❤️</span>';
+            }
+            heartsEl.innerHTML = html;
+            bestValueEl.textContent = best;
+        }
+
+        function startGame() {
+            ensureAudio();
+            state = 'playing';
+            score = 0;
+            lives = CONFIG.LIVES;
+            fruitsSliced = 0;
+            comboCount = 0;
+            comboTimer = 0;
+            fruits.length = 0;
+            halves.length = 0;
+            particles.length = 0;
+            popups.length = 0;
+            pending.length = 0;
+            spawnTimer = 0.4;
+            document.body.classList.add('playing');
+            startScreen.classList.add('hidden');
+            gameOverScreen.classList.add('hidden');
+            updateHud();
+        }
+
+        function endGame() {
+            state = 'over';
+            fruits.length = 0;
+            pending.length = 0;
+            if (score > best) {
+                best = score;
+                localStorage.setItem('fruitSlicerBest', String(best));
+            }
+            document.body.classList.remove('playing');
+            document.getElementById('finalScore').textContent = polishFruitCount(score);
+            document.getElementById('bestLine').textContent = 'Rekord: ' + best;
+            gameOverScreen.classList.remove('hidden');
+            updateHud();
+            playGameOverSound();
+        }
+
+        document.getElementById('startBtn').addEventListener('click', startGame);
+        document.getElementById('againBtn').addEventListener('click', startGame);
+
+        // ---------- Update ----------
+        function update(dt) {
+            elapsed += dt;
+            gravity = H * (CONFIG.GRAVITY + CONFIG.GRAVITY_RAMP * difficulty());
+
+            if (state !== 'over') {
+                spawnTimer -= dt;
+                if (spawnTimer <= 0) scheduleWave();
+                for (let i = pending.length - 1; i >= 0; i--) {
+                    pending[i].delay -= dt;
+                    if (pending[i].delay <= 0) {
+                        tossFruit(pending[i].isBomb);
+                        pending.splice(i, 1);
+                    }
+                }
+            }
+
+            // fruit still moving through a resting cursor should slice too
+            if (pointerSeen && elapsed - lastMoveTime < CONFIG.RESTING_SLICE_TIME) {
+                checkSlice(pointerX, pointerY, pointerX, pointerY);
+            }
+
+            for (let i = fruits.length - 1; i >= 0; i--) {
+                const f = fruits[i];
+                f.age += dt;
+                f.vy += gravity * dt;
+                f.x += f.vx * dt;
+                f.y += f.vy * dt;
+                f.rot += f.spin * dt;
+                if (f.dead || f.sliced || f.y - f.r > H + f.r * 2) {
+                    if (!f.sliced && !f.dead && state === 'playing') comboCount = 0;
+                    fruits.splice(i, 1);
+                }
+            }
+
+            for (let i = halves.length - 1; i >= 0; i--) {
+                const h = halves[i];
+                h.vy += gravity * dt;
+                h.x += h.vx * dt;
+                h.y += h.vy * dt;
+                h.rot += h.spin * dt;
+                if (h.y - h.r > H + h.r * 2) halves.splice(i, 1);
+            }
+
+            for (let i = particles.length - 1; i >= 0; i--) {
+                const p = particles[i];
+                p.life -= dt;
+                p.vy += gravity * 0.55 * p.grav * dt;
+                p.x += p.vx * dt;
+                p.y += p.vy * dt;
+                p.vx *= 0.99;
+                if (p.life <= 0) particles.splice(i, 1);
+            }
+
+            for (let i = splats.length - 1; i >= 0; i--) {
+                splats[i].life -= dt;
+                if (splats[i].life <= 0) splats.splice(i, 1);
+            }
+
+            for (let i = popups.length - 1; i >= 0; i--) {
+                const p = popups[i];
+                p.life -= dt;
+                p.y -= 45 * dt;
+                if (p.life <= 0) popups.splice(i, 1);
+            }
+
+            if (comboTimer > 0) {
+                comboTimer -= dt;
+                if (comboTimer <= 0) {
+                    if (comboCount >= 2 && state === 'playing') {
+                        score += comboCount;
+                        updateHud();
+                        popups.push({
+                            x: clamp(comboX, W * 0.2, W * 0.8),
+                            y: comboY - 40 * scale,
+                            text: 'KOMBO x' + comboCount + '!  +' + comboCount,
+                            color: '#ffd23f',
+                            size: 40 * scale,
+                            life: 1.3,
+                            maxLife: 1.3
+                        });
+                        playCombo(comboCount);
+                    }
+                    comboCount = 0;
+                }
+            }
+
+            for (const f of fireflies) {
+                f.y -= f.speed * dt;
+                f.x += Math.sin(elapsed * 0.6 + f.phase) * f.drift * dt;
+                if (f.y < -10) {
+                    f.y = H + 10;
+                    f.x = Math.random() * W;
+                }
+            }
+
+            if (shakeTimer > 0) shakeTimer -= dt;
+            if (flash > 0) flash = Math.max(0, flash - dt * 1.6);
+        }
+
+        // ---------- Draw ----------
+        function drawBackground() {
+            const g = ctx.createLinearGradient(0, 0, 0, H);
+            g.addColorStop(0, '#1b1440');
+            g.addColorStop(0.45, '#3a2568');
+            g.addColorStop(0.78, '#8a3f74');
+            g.addColorStop(1, '#e0764a');
+            ctx.fillStyle = g;
+            ctx.fillRect(0, 0, W, H);
+
+            // stars
+            for (let i = 0; i < 70; i++) {
+                const x = noise(i) * W;
+                const y = noise(i + 200) * H * 0.6;
+                const tw = 0.4 + 0.6 * Math.abs(Math.sin(elapsed * 1.5 + i));
+                ctx.fillStyle = 'rgba(255, 255, 255, ' + (0.5 * tw) + ')';
+                ctx.beginPath();
+                ctx.arc(x, y, noise(i + 400) * 1.6 + 0.5, 0, TAU);
+                ctx.fill();
+            }
+
+            // moon
+            const moonX = W * 0.84, moonY = H * 0.16, moonR = Math.min(W, H) * 0.06;
+            const mg = ctx.createRadialGradient(moonX, moonY, moonR * 0.2, moonX, moonY, moonR * 3);
+            mg.addColorStop(0, 'rgba(255, 246, 200, 0.35)');
+            mg.addColorStop(1, 'rgba(255, 246, 200, 0)');
+            ctx.fillStyle = mg;
+            ctx.beginPath();
+            ctx.arc(moonX, moonY, moonR * 3, 0, TAU);
+            ctx.fill();
+            ctx.fillStyle = '#fff6c8';
+            ctx.beginPath();
+            ctx.arc(moonX, moonY, moonR, 0, TAU);
+            ctx.fill();
+
+            // fireflies
+            ctx.save();
+            ctx.globalCompositeOperation = 'lighter';
+            for (const f of fireflies) {
+                const a = 0.25 + 0.35 * (0.5 + 0.5 * Math.sin(elapsed * 3 + f.phase));
+                const fg = ctx.createRadialGradient(f.x, f.y, 0, f.x, f.y, f.r * 4);
+                fg.addColorStop(0, 'rgba(255, 240, 150, ' + a + ')');
+                fg.addColorStop(1, 'rgba(255, 200, 80, 0)');
+                ctx.fillStyle = fg;
+                ctx.beginPath();
+                ctx.arc(f.x, f.y, f.r * 4, 0, TAU);
+                ctx.fill();
+            }
+            ctx.restore();
+
+            // hills
+            ctx.fillStyle = '#3a2050';
+            ctx.beginPath();
+            ctx.moveTo(0, H);
+            ctx.lineTo(0, H * 0.85);
+            ctx.quadraticCurveTo(W * 0.25, H * 0.72, W * 0.5, H * 0.86);
+            ctx.quadraticCurveTo(W * 0.78, H * 0.98, W, H * 0.8);
+            ctx.lineTo(W, H);
+            ctx.closePath();
+            ctx.fill();
+            ctx.fillStyle = '#231239';
+            ctx.beginPath();
+            ctx.moveTo(0, H);
+            ctx.lineTo(0, H * 0.94);
+            ctx.quadraticCurveTo(W * 0.35, H * 0.86, W * 0.62, H * 0.96);
+            ctx.quadraticCurveTo(W * 0.85, H * 1.02, W, H * 0.92);
+            ctx.lineTo(W, H);
+            ctx.closePath();
+            ctx.fill();
+        }
+
+        function drawSplats() {
+            for (const s of splats) {
+                const a = clamp(s.life / s.maxLife, 0, 1) * 0.4;
+                ctx.save();
+                ctx.globalCompositeOperation = 'lighter';
+                ctx.globalAlpha = a;
+                ctx.fillStyle = s.color;
+                for (const b of s.blobs) {
+                    ctx.beginPath();
+                    ctx.arc(s.x + b.dx, s.y + b.dy, b.r, 0, TAU);
+                    ctx.fill();
+                }
+                ctx.restore();
+            }
+        }
+
+        function drawTrail() {
+            const now = performance.now();
+            while (trail.length && now - trail[0].t > CONFIG.TRAIL_LIFE) trail.shift();
+            if (trail.length < 2) return;
+            const maxW = 16 * scale;
+            ctx.save();
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            ctx.globalCompositeOperation = 'lighter';
+            for (let i = 1; i < trail.length; i++) {
+                const p0 = trail[i - 1], p1 = trail[i];
+                const taper = i / trail.length;
+                const age = 1 - (now - p1.t) / CONFIG.TRAIL_LIFE;
+                const w = maxW * taper * age;
+                if (w < 0.4) continue;
+                ctx.strokeStyle = 'rgba(120, 220, 255, ' + (0.3 * age) + ')';
+                ctx.lineWidth = w * 2.4;
+                ctx.beginPath();
+                ctx.moveTo(p0.x, p0.y);
+                ctx.lineTo(p1.x, p1.y);
+                ctx.stroke();
+                ctx.strokeStyle = 'rgba(255, 255, 255, ' + (0.95 * age) + ')';
+                ctx.lineWidth = w;
+                ctx.beginPath();
+                ctx.moveTo(p0.x, p0.y);
+                ctx.lineTo(p1.x, p1.y);
+                ctx.stroke();
+            }
+            ctx.restore();
+        }
+
+        function drawCursor() {
+            if (!pointerSeen || state !== 'playing') return;
+            ctx.save();
+            ctx.globalCompositeOperation = 'lighter';
+            const r = 16 * scale;
+            const g = ctx.createRadialGradient(pointerX, pointerY, 0, pointerX, pointerY, r);
+            g.addColorStop(0, 'rgba(255, 255, 255, 0.95)');
+            g.addColorStop(0.35, 'rgba(140, 225, 255, 0.55)');
+            g.addColorStop(1, 'rgba(140, 225, 255, 0)');
+            ctx.fillStyle = g;
+            ctx.beginPath();
+            ctx.arc(pointerX, pointerY, r, 0, TAU);
+            ctx.fill();
+            ctx.restore();
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(pointerX, pointerY, 4 * scale, 0, TAU);
+            ctx.stroke();
+        }
+
+        function render() {
+            ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+            drawBackground();
+            drawSplats();
+
+            ctx.save();
+            if (shakeTimer > 0) {
+                const s = shakeTimer * 26 * scale;
+                ctx.translate(rand(-s, s), rand(-s, s));
+            }
+
+            for (const h of halves) {
+                ctx.save();
+                ctx.translate(h.x, h.y);
+                ctx.rotate(h.rot);
+                ctx.translate(0, h.r * 0.42);
+                h.type.half(h.r);
+                ctx.restore();
+            }
+
+            for (const p of particles) {
+                const a = clamp(p.life / p.maxLife, 0, 1);
+                ctx.save();
+                ctx.globalAlpha = a;
+                ctx.fillStyle = p.color;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.r * (0.5 + 0.5 * a), 0, TAU);
+                ctx.fill();
+                ctx.restore();
+            }
+
+            for (const f of fruits) {
+                ctx.save();
+                ctx.translate(f.x, f.y);
+                ctx.rotate(f.rot);
+                if (f.isBomb) drawBomb(f.r, elapsed);
+                else f.type.draw(f.r);
+                ctx.restore();
+            }
+
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            for (const p of popups) {
+                const a = clamp(p.life / p.maxLife, 0, 1);
+                ctx.save();
+                ctx.globalAlpha = a;
+                ctx.font = 'bold ' + p.size + 'px Arial';
+                ctx.lineWidth = p.size * 0.18;
+                ctx.strokeStyle = 'rgba(0, 0, 0, 0.6)';
+                ctx.strokeText(p.text, p.x, p.y);
+                ctx.fillStyle = p.color;
+                ctx.fillText(p.text, p.x, p.y);
+                ctx.restore();
+            }
+
+            drawTrail();
+            drawCursor();
+            ctx.restore();
+
+            if (flash > 0) {
+                ctx.fillStyle = 'rgba(255, 60, 40, ' + (flash * 0.5) + ')';
+                ctx.fillRect(0, 0, W, H);
+            }
+        }
+
+        // ---------- Loop ----------
+        let lastTime = performance.now();
+        function loop(now) {
+            const dt = Math.min((now - lastTime) / 1000, 0.05);
+            lastTime = now;
+            update(dt);
+            render();
+            requestAnimationFrame(loop);
+        }
+
+        resizeCanvas();
+        updateHud();
+        spawnTimer = 0.6;
+        requestAnimationFrame(loop);
+    </script>
+</body>
+</html>
