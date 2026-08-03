@@ -299,5 +299,32 @@
     <footer class="footer">
         github: <a href="https://github.com/pierewoj/gierka" target="_blank" rel="noopener">https://github.com/pierewoj/gierka</a>
     </footer>
+
+    <script>
+        // Coming back from a game with "← Menu" should land you on the game you
+        // just played, not at the top of the list.
+        const SCROLL_KEY = 'gierkaScrollY';
+
+        function saveScroll() {
+            sessionStorage.setItem(SCROLL_KEY, String(Math.round(window.scrollY)));
+        }
+
+        let scrollQueued = false;
+        window.addEventListener('scroll', () => {
+            if (scrollQueued) return;
+            scrollQueued = true;
+            requestAnimationFrame(() => {
+                scrollQueued = false;
+                saveScroll();
+            });
+        }, { passive: true });
+
+        window.addEventListener('pagehide', saveScroll);
+
+        // Thumbnails have a fixed height, so the page is already the right
+        // length here and we can jump without a visible flicker.
+        const savedY = parseInt(sessionStorage.getItem(SCROLL_KEY) || '0', 10);
+        if (savedY > 0) window.scrollTo(0, savedY);
+    </script>
 </body>
 </html>
