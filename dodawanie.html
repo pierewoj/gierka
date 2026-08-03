@@ -262,6 +262,32 @@
         let recentResults = [];
         let hadMistakeThisQuestion = false;
 
+        // At the easiest level there are only a handful of possible sums, so
+        // plain random draws repeat a lot. Remember the combinations we just
+        // showed and prefer fresh ones. 1+2 and 2+1 count as the same combo.
+        const RECENT_QUESTIONS_MEMORY = 8;
+        let recentQuestions = [];
+
+        function pickAddends(maxAddend) {
+            const pairs = [];
+            for (let a = 1; a <= maxAddend; a++) {
+                for (let b = a; b <= maxAddend; b++) pairs.push([a, b]);
+            }
+
+            // Never remember so much that there is nothing fresh left to pick.
+            const memory = Math.min(RECENT_QUESTIONS_MEMORY, Math.max(0, pairs.length - 2));
+            const recent = memory > 0 ? recentQuestions.slice(-memory) : [];
+            const fresh = pairs.filter(([a, b]) => !recent.includes(a + '+' + b));
+            const pool = fresh.length ? fresh : pairs;
+
+            const [a, b] = pool[Math.floor(Math.random() * pool.length)];
+            recentQuestions.push(a + '+' + b);
+            if (recentQuestions.length > RECENT_QUESTIONS_MEMORY) recentQuestions.shift();
+
+            // Show the same combination in either order for a bit more variety.
+            return Math.random() < 0.5 ? [a, b] : [b, a];
+        }
+
         function updateDifficulty(correctFirstTry) {
             questionsAnswered++;
             recentResults.push(correctFirstTry);
@@ -316,8 +342,7 @@
             hadMistakeThisQuestion = false;
 
             const maxAddend = Math.round(difficulty);
-            const a = Math.floor(Math.random() * maxAddend) + 1;
-            const b = Math.floor(Math.random() * maxAddend) + 1;
+            const [a, b] = pickAddends(maxAddend);
             currentAnswer = a + b;
 
             document.getElementById('question').textContent = `${a} + ${b} = ?`;

@@ -78,7 +78,10 @@
             border-radius: 20px;
             border: 3px solid rgba(255, 255, 255, 0.35);
             box-shadow: 0 0 40px rgba(120, 80, 255, 0.4);
-            max-width: 90vw;
+            /* max-content keeps the box from collapsing to half the screen
+               width on a phone (absolute box at left:50%). */
+            width: max-content;
+            max-width: min(90vw, 460px);
         }
 
         #instructions {

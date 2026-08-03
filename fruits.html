@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Owocowy Ninja - Gierka</title>
+    <title>Witaminowy Wojownik - Gierka</title>
     <style>
         * {
             margin: 0;
@@ -102,7 +102,10 @@
             color: #2d2b45;
             box-shadow: 0 18px 40px rgba(0, 0, 0, 0.45);
             z-index: 20;
-            max-width: 90vw;
+            /* max-content keeps the box from collapsing to half the screen
+               width on a phone (fixed box at left:50%). */
+            width: max-content;
+            max-width: min(90vw, 460px);
         }
 
         .overlay h1 {
@@ -186,7 +189,7 @@
     </div>
 
     <div id="startScreen" class="overlay">
-        <h1>🍉 Owocowy Ninja 🍓</h1>
+        <h1>🍉 Witaminowy Wojownik 🍓</h1>
         <p><strong>Przesuwaj myszką</strong> po owocach, żeby je pokroić!</p>
         <p>Nie trzeba klikać. 💣 Bomby zabierają życie.</p>
         <button class="button" id="startBtn">GRAJ 🍊</button>
